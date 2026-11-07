@@ -14,6 +14,8 @@
     "test:schema": "node --experimental-strip-types scripts/test-schema.ts",
     "test:gateway": "node --experimental-strip-types scripts/test-gateway.ts",
     "test:migration": "node --experimental-strip-types scripts/test-migration.ts",
+    "test:publish-flow": "node scripts/publish-flow.mjs",
+    "test:responsive": "node scripts/responsive-check.mjs",
     "verify": "npm run build && npm run test:schema && npm run test:gateway && npm run test:migration && npm run check:copy && npm run check:assets && npm run smoke",
     "shadcn": "npx --yes shadcn@latest"
   },
