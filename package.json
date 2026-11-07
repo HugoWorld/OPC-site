@@ -13,7 +13,8 @@
     "smoke": "node scripts/smoke.mjs",
     "test:schema": "node --experimental-strip-types scripts/test-schema.ts",
     "test:gateway": "node --experimental-strip-types scripts/test-gateway.ts",
-    "verify": "npm run build && npm run test:schema && npm run test:gateway && npm run check:copy && npm run check:assets && npm run smoke",
+    "test:migration": "node --experimental-strip-types scripts/test-migration.ts",
+    "verify": "npm run build && npm run test:schema && npm run test:gateway && npm run test:migration && npm run check:copy && npm run check:assets && npm run smoke",
     "shadcn": "npx --yes shadcn@latest"
   },
   "dependencies": {
