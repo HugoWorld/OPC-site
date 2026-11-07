@@ -1,0 +1,38 @@
+{
+  "name": "opc-site",
+  "private": true,
+  "version": "1.1.0",
+  "type": "module",
+  "description": "洛小山个人专业门户高保真原型：前台站点 + 运营工作台 + 飞书多维表格数据契约",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "shadcn": "npx --yes shadcn@latest"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cn": "^0.5.1",
+    "lucide-react": "^0.469.0",
+    "motion": "^12.0.0",
+    "radix-ui": "^1.8.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.5",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "tw-animate-css": "^1.2.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
