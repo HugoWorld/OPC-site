@@ -1,26 +1,76 @@
 import { HashRouter, Route, Routes, useLocation } from "react-router-dom"
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
 
 import { SiteStoreProvider, useSiteData } from "@/site/admin/store"
-import { AdminPage } from "@/site/admin/AdminPage"
 import { PreviewBridge } from "@/site/components/PreviewBridge"
 import { FloatCta, MobileCtaBar } from "@/site/components/Cta"
 import { Footer } from "@/site/components/Footer"
 import { Header } from "@/site/components/Header"
-import { AboutPage } from "@/site/pages/AboutPage"
-import { ArticlePage } from "@/site/pages/ArticlePage"
-import { CasesPage } from "@/site/pages/CasesPage"
-import { ContactPage } from "@/site/pages/ContactPage"
 import { DynamicPage, DynamicPageView } from "@/site/pages/DynamicPage"
 import { HomePage } from "@/site/pages/HomePage"
 import { LoginPage } from "@/site/pages/LoginPage"
-import { MethodPage } from "@/site/pages/MethodPage"
 import { NotFoundPage } from "@/site/pages/NotFoundPage"
-import { PrivacyPage } from "@/site/pages/PrivacyPage"
-import { SolutionPage } from "@/site/pages/SolutionPage"
-import { SolutionsPage } from "@/site/pages/SolutionsPage"
-import { SharesPage } from "@/site/pages/SharesPage"
-import { WritingPage } from "@/site/pages/WritingPage"
+
+/* 前台二级页按需加载：首屏只下载首页所需代码（PRD O-6 路由级动态导入）。 */
+const SolutionsPage = lazy(() =>
+  import("@/site/pages/SolutionsPage").then((m) => ({ default: m.SolutionsPage })),
+)
+const SolutionPage = lazy(() =>
+  import("@/site/pages/SolutionPage").then((m) => ({ default: m.SolutionPage })),
+)
+const MethodPage = lazy(() =>
+  import("@/site/pages/MethodPage").then((m) => ({ default: m.MethodPage })),
+)
+const CasesPage = lazy(() =>
+  import("@/site/pages/CasesPage").then((m) => ({ default: m.CasesPage })),
+)
+const WritingPage = lazy(() =>
+  import("@/site/pages/WritingPage").then((m) => ({ default: m.WritingPage })),
+)
+const ArticlePage = lazy(() =>
+  import("@/site/pages/ArticlePage").then((m) => ({ default: m.ArticlePage })),
+)
+const SharesPage = lazy(() =>
+  import("@/site/pages/SharesPage").then((m) => ({ default: m.SharesPage })),
+)
+const AboutPage = lazy(() =>
+  import("@/site/pages/AboutPage").then((m) => ({ default: m.AboutPage })),
+)
+const ContactPage = lazy(() =>
+  import("@/site/pages/ContactPage").then((m) => ({ default: m.ContactPage })),
+)
+const PrivacyPage = lazy(() =>
+  import("@/site/pages/PrivacyPage").then((m) => ({ default: m.PrivacyPage })),
+)
+/** 工作台按需加载：访客只看前台时不必下载编辑器代码（PRD O-6）。 */
+const AdminPageLazy = lazy(() =>
+  import("@/site/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
+)
+
+function AdminRoute() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+          正在加载运营工作台…
+        </div>
+      }
+    >
+      <SiteStoreProvider scope="draft">
+        <AdminPageLazy />
+      </SiteStoreProvider>
+    </Suspense>
+  )
+}
+
+/** 二级页按需加载的过渡态：只占位，不闪烁布局。 */
+function RouteLoading() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+      正在加载…
+    </div>
+  )
+}
 
 /** 路由切换时回到顶部（原型体验细节）。 */
 function ScrollToTop() {
@@ -63,23 +113,9 @@ export function SiteApp() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/" element={<LoginPage />} />
 
-        {/* 运营工作台（独立布局，草稿作用域） */}
-        <Route
-          path="/admin"
-          element={
-            <SiteStoreProvider scope="draft">
-              <AdminPage />
-            </SiteStoreProvider>
-          }
-        />
-        <Route
-          path="/admin/*"
-          element={
-            <SiteStoreProvider scope="draft">
-              <AdminPage />
-            </SiteStoreProvider>
-          }
-        />
+        {/* 运营工作台（独立布局，草稿作用域，按需加载） */}
+        <Route path="/admin" element={<AdminRoute />} />
+        <Route path="/admin/*" element={<AdminRoute />} />
 
         {/* 对外站点（统一布局，作用域随 preview 参数） */}
         <Route path="*" element={<SiteRoutes />} />
@@ -113,6 +149,7 @@ function SiteRoutes() {
   return (
     <SiteStoreProvider scope={preview ? "draft" : "published"}>
       <PreviewBridge />
+      <Suspense fallback={<RouteLoading />}>
       <Routes>
         <Route path="/" element={<SiteLayout><HomeRoute /></SiteLayout>} />
         <Route path="/solutions/" element={<SiteLayout><SolutionsPage /></SiteLayout>} />
@@ -129,6 +166,7 @@ function SiteRoutes() {
         <Route path="/pages/:slug/" element={<SiteLayout><DynamicPage /></SiteLayout>} />
         <Route path="*" element={<SiteLayout><NotFoundPage /></SiteLayout>} />
       </Routes>
+      </Suspense>
     </SiteStoreProvider>
   )
 }

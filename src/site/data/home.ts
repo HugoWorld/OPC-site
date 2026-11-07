@@ -3,6 +3,9 @@
 /* 与正式站 data/hero.yml、data/home.yml、data/value-props.yml 同源。   */
 /* ------------------------------------------------------------------ */
 
+import heroAvatar from "../assets/hero-avatar.webp"
+import heroBg from "../assets/hero-bg.webp"
+
 export const HERO = {
   eyebrow: "法律与咨询服务一线出身 · 一人公司",
   title: "把专业服务里最重复的部分，做成能直接接手的交付流水线",
@@ -13,10 +16,10 @@ export const HERO = {
   tags: ["合同审查", "案件流程", "合规巡检", "一人公司"],
   githubUrl: "https://github.com/HugoWorld",
   githubLabel: "GitHub",
-  /** 卡通拟人化头像 URL（空 = 用主题占位字「H」） */
-  avatarUrl: "https://aka.doubaocdn.com/s/0BV9gzpy2e",
-  /** 头像区背景图 URL（空 = 渐变玻璃底） */
-  heroBgUrl: "https://aka.doubaocdn.com/s/u66STV9Roe",
+  /** 卡通拟人化头像（站内资源，空则改用主题占位字「H」） */
+  avatarUrl: heroAvatar as string,
+  /** 头像区背景图（站内资源，空则改用渐变玻璃底） */
+  heroBgUrl: heroBg as string,
 } as const
 
 export interface Stat {
