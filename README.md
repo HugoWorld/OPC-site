@@ -25,11 +25,11 @@ React 19 · Vite 6 · TypeScript 5.7 · Tailwind CSS v4 · shadcn/ui
 
 | 站点前台 | 运营工作台 |
 | --- | --- |
-| ![首页](https://aka.doubaocdn.com/s/qVJpqljTkV) | ![工作台](https://aka.doubaocdn.com/s/64OLJcChUy) |
+| ![首页](docs/screenshots/01-home.png) | ![工作台](docs/screenshots/02-admin.png) |
 | **登录页** | **数据源状态** |
-| ![登录页](https://aka.doubaocdn.com/s/fjkel2TrUH) | ![数据源](https://aka.doubaocdn.com/s/TZ5h2Vr7UC) |
+| ![登录页](docs/screenshots/03-login.png) | ![数据源](docs/screenshots/04-admin-datasource.png) |
 
-> 截图托管在豆包 CDN，若图片失效可按下文「本地运行」后自行截图替换。
+> 截图保存在 docs/screenshots/，由本地运行后截取。
 
 ## 功能清单
 

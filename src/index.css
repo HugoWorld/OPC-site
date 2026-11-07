@@ -1,0 +1,494 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   设计 token —— 与 portal/site.config.json 的 theme 字段保持一致
+   改这里就能让所有原型和正式站共用一套视觉语言。
+   ============================================================ */
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #181b26;
+  --card: #ffffff;
+  --card-foreground: #181b26;
+  --popover: #ffffff;
+  --popover-foreground: #181b26;
+  --primary: #ff5d01;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f7;
+  --secondary-foreground: #181b26;
+  --muted: #f4f5f9;
+  --muted-foreground: #56607a;
+  --accent: rgba(255, 93, 1, 0.09);
+  --accent-foreground: #c2410c;
+  --destructive: #e11d48;
+  --destructive-foreground: #ffffff;
+  --border: #e6e8ef;
+  --input: #e6e8ef;
+  --ring: #ff5d01;
+
+  --radius: 0.875rem;
+
+  /* 品牌辅助色 */
+  --brand-accent: #ff5d01;
+  --brand-accent-soft: rgba(255, 93, 1, 0.1);
+  --brand-accent2: #8b5cf6;
+  --brand-ink: #181b26;
+  --brand-ink-2: #56607a;
+  --brand-ink-3: #9aa1b5;
+  --brand-bg: #f6f7fb;
+  --brand-surface: #ffffff;
+  --brand-border: #e6e8ef;
+
+  --brand-shadow-soft: 0 1px 3px rgba(24, 27, 38, 0.06), 0 1px 2px rgba(255, 93, 1, 0.04);
+  --brand-shadow-lift: 0 18px 44px -18px rgba(24, 27, 38, 0.22);
+  --brand-shadow-glow: 0 0 0 1px rgba(255, 93, 1, 0.2), 0 18px 44px -18px rgba(255, 93, 1, 0.3);
+
+  /* ===== 工作站控制台专用状态色（门户站不使用）=====
+     一条约束：状态色只做「小圆点 / 文字 / 细条」，
+     不用作大面积填充，避免控制台变成红绿灯墙。 */
+  --studio-expired: #b23b2c; /* 已过期 / 已失效 */
+  --studio-warn: #8f6008; /* 待复核 / 临近到期 */
+  --studio-ok: #256f52; /* 已发布 / 校验通过 */
+  --studio-track: #d9dde7; /* 时间轴底轨 */
+}
+
+.dark {
+  --background: #0e1118;
+  --foreground: #eef1f7;
+  --card: #161a24;
+  --card-foreground: #eef1f7;
+  --popover: #161a24;
+  --popover-foreground: #eef1f7;
+  --primary: #6f9bff;
+  --primary-foreground: #0e1118;
+  --secondary: #1e2431;
+  --secondary-foreground: #eef1f7;
+  --muted: #1a1f2b;
+  --muted-foreground: #aeb5c6;
+  --accent: #1b2540;
+  --accent-foreground: #a9c2ff;
+  --destructive: #ef4444;
+  --destructive-foreground: #0e1118;
+  --border: #262b38;
+  --input: #262b38;
+  --ring: #6f9bff;
+
+  --brand-accent: #6f9bff;
+  --brand-accent-soft: #1b2540;
+  --brand-ink: #eef1f7;
+  --brand-ink-2: #aeb5c6;
+  --brand-ink-3: #7d8496;
+  --brand-bg: #0e1118;
+  --brand-surface: #161a24;
+  --brand-border: #262b38;
+
+  --brand-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --brand-shadow-lift: 0 12px 34px -12px rgba(0, 0, 0, 0.6);
+  --brand-shadow-glow: 0 0 0 1px rgba(111, 155, 255, 0.24), 0 18px 44px -18px rgba(111, 155, 255, 0.42);
+
+  --studio-expired: #e0806c;
+  --studio-warn: #d8a441;
+  --studio-ok: #5cbd97;
+  --studio-track: #2b3140;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-soft: var(--brand-accent-soft);
+  --color-brand-accent2: var(--brand-accent2);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ink-2: var(--brand-ink-2);
+  --color-brand-ink-3: var(--brand-ink-3);
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-border: var(--brand-border);
+
+  --color-studio-expired: var(--studio-expired);
+  --color-studio-warn: var(--studio-warn);
+  --color-studio-ok: var(--studio-ok);
+  --color-studio-track: var(--studio-track);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 5px);
+  --radius-2xl: calc(var(--radius) + 11px);
+
+  --font-sans: "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Instrument Serif", "Noto Serif SC", Georgia, "Songti SC", serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --shadow-soft: var(--brand-shadow-soft);
+  --shadow-lift: var(--brand-shadow-lift);
+  --shadow-glow: var(--brand-shadow-glow);
+
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.6s ease both;
+  --animate-marquee: marquee 34s linear infinite;
+  --animate-shimmer: shimmer 2.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.6s ease-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand-accent) 35%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* ============================ 自定义工具类 ============================ */
+
+/* 页面纵向密度（由运营工作台主题设置控制） */
+:root {
+  --density-section-y: 3rem;
+  --density-section-y-md: 3.5rem;
+}
+[data-density="compact"] {
+  --density-section-y: 2rem;
+  --density-section-y-md: 2.25rem;
+}
+[data-density="relaxed"] {
+  --density-section-y: 4.5rem;
+  --density-section-y-md: 5.5rem;
+}
+
+/* 细网格背景，配合径向遮罩做高级感底纹 */
+@utility grid-bg {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--brand-border) 70%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--brand-border) 70%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* 网格上方的径向淡出，避免线条硬邦邦 */
+@utility grid-mask {
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* 渐变文字：主色 → 渐变副色（默认 活力橙 → 亮紫，主题令牌可驱动） */
+@utility text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--brand-accent) 92%, var(--brand-ink)) 0%,
+    color-mix(in oklab, var(--brand-accent) 45%, var(--brand-accent2)) 55%,
+    color-mix(in oklab, var(--brand-accent2) 88%, var(--brand-ink)) 100%
+  );
+  background-clip: text;
+  color: transparent;
+}
+
+/* 玻璃拟态卡片 */
+@utility glass {
+  background-color: color-mix(in oklab, var(--brand-surface) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(1.6);
+}
+
+/* 细颗粒噪点，消掉大面积纯色的塑料感 */
+@utility grain {
+  position: relative;
+}
+
+@utility ring-accent {
+  box-shadow: var(--brand-shadow-glow);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--brand-accent) 22%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================ 工作站控制台 ============================
+   这套界面是「交付台账」，不是 SaaS 仪表盘：
+   - 列表用发丝线表格，不用卡片网格
+   - id / 版本 / 天数一律等宽对齐
+   - 状态色只出现在小色点和文字上，不做色块
+   ---------------------------------------------------------- */
+
+@utility ledger-row {
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@utility ledger-row-hover {
+  &:hover {
+    background-color: color-mix(in oklab, var(--muted) 55%, transparent);
+  }
+}
+
+@utility ledger-head {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+}
+
+/* 等宽数字：列宽固定时数字不跳动 */
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 状态小圆点 */
+@utility dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex: none;
+}
+
+/* 章节号：仅用于「确实是序列」的地方（工序、步骤） */
+@utility seq {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 控制台侧栏：一条竖线作为当前项指示，不做整块高亮 */
+@utility rail-item {
+  position: relative;
+  transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@utility rail-item-active {
+  color: var(--foreground);
+  font-weight: 500;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 16px;
+    border-radius: 9999px;
+    background: var(--brand-accent);
+  }
+}
+
+/* 预览定位高亮：工作台编辑某组时，预览对应区块闪烁提示 */
+@keyframes preview-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  20% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand-accent) 60%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand-accent) 60%, transparent);
+  }
+}
+
+.preview-flash {
+  animation: preview-flash 2.2s ease both;
+  outline: 2px solid color-mix(in oklab, var(--brand-accent) 70%, transparent);
+  outline-offset: -2px;
+}
+
+/* ============================ 门户站 · Bento + 玻璃视觉系统 ============================
+   前台明快作用域：SiteLayout 根节点挂 .site-dark，用局部变量覆盖设计 token。
+   配色取向：浅色玻璃 + 活力渐变（Astro/Framer 式），避免深色沉闷。
+   主题令牌（accent / accent2 / density）由运营工作台「主题与排版」写入并驱动：
+   --primary / --brand-accent ← accent，--brand-accent2 ← accent2。
+   工作台（/#/admin/）不挂此类，保持浅色控制台，两者互不污染。
+   ---------------------------------------------------------- */
+
+.site-dark {
+  --background: #f6f7fb;
+  background-color: #f6f7fb;
+  --foreground: #181b26;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #181b26;
+  --popover: rgba(255, 255, 255, 0.96);
+  --popover-foreground: #181b26;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(255, 255, 255, 0.9);
+  --secondary-foreground: #181b26;
+  --muted: #eceef4;
+  --muted-foreground: #56607a;
+  --destructive: #e11d48;
+  --destructive-foreground: #ffffff;
+  --border: rgba(24, 27, 38, 0.09);
+  --input: rgba(24, 27, 38, 0.12);
+
+  /* 主题驱动色（--primary / --ring / --brand-accent / --brand-accent2 / --accent /
+     --accent-foreground）不在此硬编码：继承 :root，由运营工作台主题令牌动态写入。 */
+
+  --brand-ink: #181b26;
+  --brand-ink-2: #56607a;
+  --brand-ink-3: #9aa1b5;
+  --brand-bg: #f6f7fb;
+  --brand-surface: rgba(255, 255, 255, 0.78);
+  --brand-border: rgba(24, 27, 38, 0.09);
+
+  --brand-shadow-soft: 0 1px 3px rgba(24, 27, 38, 0.06), 0 1px 2px rgba(255, 93, 1, 0.04);
+  --brand-shadow-lift: 0 18px 44px -18px rgba(24, 27, 38, 0.22);
+  --brand-shadow-glow: 0 0 0 1px rgba(255, 93, 1, 0.2), 0 18px 44px -18px rgba(255, 93, 1, 0.3);
+}
+
+/* 玻璃卡片：半透明 + 模糊 + 发丝边框 + 柔影（Bento 网格的基本单元） */
+@utility glass-card {
+  position: relative;
+  background-color: color-mix(in oklab, var(--brand-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid color-mix(in oklab, var(--border) 92%, transparent);
+  box-shadow: var(--brand-shadow-soft);
+}
+
+/* 高透玻璃：用于页头等需要更强文字对比的区域 */
+@utility glass-strong {
+  position: relative;
+  background-color: color-mix(in oklab, var(--brand-surface) 86%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
+}
+
+/* 悬浮微交互：上浮 + 边框泛光（Framer 式 hover） */
+@utility card-hover {
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+
+  &:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--brand-accent) 42%, transparent);
+    box-shadow: var(--brand-shadow-lift);
+  }
+}
+
+/* 背景光斑：橙 / 紫 / 青 明快渐变，配合玻璃卡片透出活力（浅色底用低饱和） */
+@utility ambient {
+  background-image:
+    radial-gradient(40% 32% at 16% 6%, rgba(255, 93, 1, 0.13), transparent 62%),
+    radial-gradient(34% 26% at 88% 14%, rgba(139, 92, 246, 0.13), transparent 60%),
+    radial-gradient(44% 34% at 52% 96%, rgba(56, 189, 248, 0.1), transparent 62%);
+}
+
+/* 滚动显现：进入视口后淡入上浮（由 Reveal 组件切换 reveal-in） */
+@utility reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+@utility reveal-in {
+  opacity: 1;
+  transform: translateY(0);
+}
