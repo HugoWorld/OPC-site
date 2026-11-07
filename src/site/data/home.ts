@@ -9,11 +9,11 @@ export const HERO = {
   lead: "合同审查、法规更新、案件流程、咨询交付——不卖流量，只交付能验收的服务工具与流程标准。",
   note: "我不承诺案件结果、胜诉率或咨询成效。专业意见的最终出具由执业人员复核确认。",
   /* ---- 人设区（游客动线第一屏）：头像、气泡、个人标签、GitHub ---- */
-  bubble: "嗨，我是洛小山。把反复踩过的坑，做成能直接接手的工具。",
+  bubble: "嗨，我是HugoW。把反复踩过的坑，做成能直接接手的工具。",
   tags: ["合同审查", "案件流程", "合规巡检", "一人公司"],
   githubUrl: "https://github.com/HugoWorld",
   githubLabel: "GitHub",
-  /** 卡通拟人化头像 URL（空 = 用主题占位字「洛」） */
+  /** 卡通拟人化头像 URL（空 = 用主题占位字「H」） */
   avatarUrl: "https://aka.doubaocdn.com/s/0BV9gzpy2e",
   /** 头像区背景图 URL（空 = 渐变玻璃底） */
   heroBgUrl: "https://aka.doubaocdn.com/s/u66STV9Roe",

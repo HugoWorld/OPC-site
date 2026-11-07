@@ -4,17 +4,17 @@
 /* ------------------------------------------------------------------ */
 
 export const SITE = {
-  brandName: "洛小山",
-  brandShort: "洛",
+  brandName: "HugoW",
+  brandShort: "H",
   tagline: "法律与咨询服务交付",
   locale: "zh-CN",
-  author: "洛小山",
+  author: "HugoW",
   company: "个人独立经营",
   icoNote: "",
   /** 品牌名（占位）。形象与实名确认后替换，全站自动生效。 */
-  mascotAlt: "洛小山 拟卡通形象（占位）",
-  email: "hello@luoxiaoshan.example",
-  emailHref: "mailto:hello@luoxiaoshan.example",
+  mascotAlt: "HugoW 拟卡通形象（占位）",
+  email: "hello@hugow.example",
+  emailHref: "mailto:hello@hugow.example",
   wechatNote: "加微信请备注「来意 + 所在行业 + 所在城市」",
   responseTime: "1—3 个工作日",
   demoDuration: "15 分钟，用你的脱敏资料现场跑",
@@ -35,8 +35,8 @@ export const CTA = {
   contactImageUrl: "",
   /** 自定义联系方式（label + 内容；右侧底部一行副信息展示，发布前替换为真实信息） */
   contactItems: [
-    { label: "微信", value: "luoxiaoshan（示例）" },
-    { label: "邮箱", value: "hello@luoxiaoshan.example" },
+    { label: "微信", value: "hugow（示例）" },
+    { label: "邮箱", value: "hello@hugow.example" },
     { label: "坐标", value: "广州 · 法律与咨询服务交付" },
   ],
   /** 首页「联系一下」右侧：个人微信二维码（工作台可上传或粘贴链接，空 = 前台显示占位卡） */
@@ -150,7 +150,7 @@ export const DEFAULT_CONTACT: ContactContent = {
   sidebarTitle: "也可以直接找我",
   sidebarNote: "加微信请备注「来意 + 所在行业 + 所在城市」，我会回得更快。",
   sidebarMeta: [
-    { label: "邮箱", value: "hello@luoxiaoshan.example" },
+    { label: "邮箱", value: "hello@hugow.example" },
     { label: "响应时间", value: "1—3 个工作日" },
     { label: "演示时长", value: "15 分钟，用你的脱敏资料现场跑" },
   ],

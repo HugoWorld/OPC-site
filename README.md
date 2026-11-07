@@ -1,6 +1,6 @@
 <div align="center">
 
-# 洛小山个人专业门户 · 高保真原型
+# HugoW个人专业门户 · 高保真原型
 
 一个人公司式的专业服务门户：前台站点 + 运营工作台 + 飞书多维表格数据契约。<br>
 React 19 · Vite 6 · TypeScript 5.7 · Tailwind CSS v4 · shadcn/ui
@@ -62,7 +62,7 @@ React 19 · Vite 6 · TypeScript 5.7 · Tailwind CSS v4 · shadcn/ui
 **认证**
 
 - 未登录访问 `#/admin/*` 会被拦截并引导到 `#/login/?next=...`
-- 会话 12 小时过期，`localStorage` 键 `luoxiaoshan-admin-session-v1`
+- 会话 12 小时过期，`localStorage` 键 `hugow-admin-session-v1`
 - 当前为**模拟登录**（`source: "mock"`），页面明确标注「原型 · 模拟登录」；真实飞书 OAuth 的接入点已在代码中预留
 
 ## 技术栈

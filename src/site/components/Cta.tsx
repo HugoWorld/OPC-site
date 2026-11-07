@@ -69,7 +69,7 @@ export function CtaBand({
                 />
               ) : (
                 <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-primary/30 bg-gradient-to-br from-primary to-accent2 text-[20px] font-extrabold text-white shadow-glow md:size-14">
-                  {theme.avatarLetter || "洛"}
+                  {theme.avatarLetter || "H"}
                 </span>
               )}
               <div className="min-w-0">

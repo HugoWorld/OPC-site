@@ -27,10 +27,10 @@ export function LoginPage() {
         <div className="max-w-[460px]">
           <Link to="/" className="inline-flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-primary text-[13px] font-bold text-primary-foreground">
-              洛
+              H
             </span>
             <span>
-              <span className="block text-[15px] font-semibold leading-tight">洛小山</span>
+              <span className="block text-[15px] font-semibold leading-tight">HugoW</span>
               <span className="block text-[11.5px] text-muted-foreground">法律与咨询服务交付</span>
             </span>
           </Link>

@@ -26,14 +26,14 @@ export interface AdminUser {
 }
 
 /** 会话键（与草稿/已发布数据分开，登出只清会话不动内容） */
-export const SESSION_KEY = "luoxiaoshan-admin-session-v1"
+export const SESSION_KEY = "hugow-admin-session-v1"
 
 /** 会话有效期：真实阶段按飞书 token 生命周期；原型阶段给 12 小时，过期需重新登录 */
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000
 
 /** 原型占位账号：字段结构与真实飞书用户一致，便于将来只替换数据来源 */
 export const MOCK_USER: AdminUser = {
-  name: "洛小山",
+  name: "HugoW",
   avatarUrl: "",
   openId: "ou_mock_7f3c9a1b2d4e5f60",
   source: "mock",
@@ -105,7 +105,7 @@ export function AdminLoginGate() {
     <div className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
       <div className="w-full max-w-[420px] rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
         <span className="mx-auto grid size-11 place-items-center rounded-xl bg-primary/10 text-[15px] font-bold text-primary">
-          洛
+          H
         </span>
         <h1 className="mt-4 text-[18px] font-semibold">运营工作台需要登录</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">

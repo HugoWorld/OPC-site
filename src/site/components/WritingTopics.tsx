@@ -6,7 +6,7 @@ import { useSiteData } from "@/site/admin/store"
 import { CATEGORY_LABELS } from "@/site/data/site"
 import type { Article } from "@/site/data/writing"
 
-/** 主题卡配色（浅色明快四色系，从洛小山「按主题找文章」样式借鉴） */
+/** 主题卡配色（浅色明快四色系，从HugoW「按主题找文章」样式借鉴） */
 const CAT_COLOR: Record<string, { card: string; badge: string }> = {
   case: {
     card: "border-rose-500/25 bg-gradient-to-b from-rose-500/12 to-rose-500/3",

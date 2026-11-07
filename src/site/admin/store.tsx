@@ -19,10 +19,10 @@ import { DEFAULT_PAGES, type CustomPage } from "@/site/data/pages"
 /* - 预览面板（?preview=1）读取「草稿」实时效果。                        */
 /* ------------------------------------------------------------------ */
 
-export const DRAFT_KEY = "luoxiaoshan-admin-draft-v1"
-export const PUBLISHED_KEY = "luoxiaoshan-admin-published-v1"
+export const DRAFT_KEY = "hugow-admin-draft-v1"
+export const PUBLISHED_KEY = "hugow-admin-published-v1"
 /** 兼容旧版单存储 key（一次性迁移） */
-const LEGACY_KEY = "luoxiaoshan-admin-v1"
+const LEGACY_KEY = "hugow-admin-v1"
 
 /* ---------------- 主题配置 ---------------- */
 
@@ -33,7 +33,7 @@ export interface ThemeConfig {
   accent2: string
   /** 页面纵向密度：compact 紧凑 / normal 标准 / relaxed 宽松 */
   density: "compact" | "normal" | "relaxed"
-  /** 品牌形象图 URL（空 = 用占位字「洛」） */
+  /** 品牌形象图 URL（空 = 用占位字「H」） */
   avatarUrl: string
   /** 品牌字（占位字，与 avatarUrl 互斥展示） */
   avatarLetter: string
@@ -73,7 +73,7 @@ export const DEFAULT_THEME: ThemeConfig = {
   accent2: "#8b5cf6",
   density: "normal",
   avatarUrl: "",
-  avatarLetter: "洛",
+  avatarLetter: "H",
 }
 
 /* ---------------- 可编辑切片 ---------------- */

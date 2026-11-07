@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.1.0",
   "type": "module",
-  "description": "洛小山个人专业门户高保真原型：前台站点 + 运营工作台 + 飞书多维表格数据契约",
+  "description": "HugoW个人专业门户高保真原型：前台站点 + 运营工作台 + 飞书多维表格数据契约",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

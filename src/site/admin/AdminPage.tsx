@@ -855,7 +855,7 @@ function ThemeEditor() {
               className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary/60"
             />
             <p className="text-[11.5px] text-muted-foreground">
-              留空则显示占位字「洛」。原型阶段不上传文件，仅支持网络图片 URL。
+              留空则显示占位字「H」。原型阶段不上传文件，仅支持网络图片 URL。
             </p>
           </div>
           <div className="space-y-1.5">
@@ -863,7 +863,7 @@ function ThemeEditor() {
             <input
               type="text"
               value={theme.avatarLetter}
-              onChange={(e) => setSlices({ theme: { ...theme, avatarLetter: e.target.value || "洛" } })}
+              onChange={(e) => setSlices({ theme: { ...theme, avatarLetter: e.target.value || "H" } })}
               maxLength={2}
               className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary/60"
             />
@@ -920,13 +920,13 @@ function Publish() {
 
   const exportYaml = () => {
     const yaml = toYaml(data as unknown as Record<string, unknown>)
-    download("luoxiaoshan-site-data.yaml", yaml, "application/yaml;charset=utf-8")
+    download("hugow-site-data.yaml", yaml, "application/yaml;charset=utf-8")
     setNotice("已导出 YAML（含全部切片当前值）")
   }
 
   const exportTs = () => {
-    const ts = `/* 洛小山个人门户 · 站点数据导出（${new Date().toISOString().slice(0, 10)}）\n * 生成自运营工作台。将此文件中的覆盖数据合入 data/*.ts 默认值即可固化。 */\n\nexport const SITE_DATA_EXPORT = ${JSON.stringify(data, null, 2)} as const\n`
-    download("luoxiaoshan-site-data.ts", ts, "text/typescript;charset=utf-8")
+    const ts = `/* HugoW个人门户 · 站点数据导出（${new Date().toISOString().slice(0, 10)}）\n * 生成自运营工作台。将此文件中的覆盖数据合入 data/*.ts 默认值即可固化。 */\n\nexport const SITE_DATA_EXPORT = ${JSON.stringify(data, null, 2)} as const\n`
+    download("hugow-site-data.ts", ts, "text/typescript;charset=utf-8")
     setNotice("已导出 TS（覆盖数据常量，可合入 data 文件）")
   }
 
@@ -1178,11 +1178,11 @@ export function AdminPage() {
         <div className="flex h-14 items-center justify-between px-5">
           <div className="flex items-center gap-2.5">
             <span className="grid size-7 place-items-center rounded-lg bg-primary text-[12px] font-bold text-primary-foreground">
-              洛
+              H
             </span>
             <span className="text-[14px] font-semibold">运营工作台</span>
             <span className="hidden text-[12px] text-muted-foreground sm:inline">
-              洛小山个人门户 · 原型
+              HugoW个人门户 · 原型
             </span>
           </div>
           <div className="flex items-center gap-2">

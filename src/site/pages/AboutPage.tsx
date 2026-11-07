@@ -28,12 +28,12 @@ export function AboutPage() {
             {theme.avatarUrl ? (
               <img
                 src={theme.avatarUrl}
-                alt={theme.avatarLetter || "洛小山 形象"}
+                alt={theme.avatarLetter || "HugoW 形象"}
                 className="glass-card size-[150px] rounded-2xl object-cover"
               />
             ) : (
               <span className="glass-card grid size-[150px] place-items-center rounded-2xl text-[64px] font-bold text-primary/60">
-                {theme.avatarLetter || `洛`}
+                {theme.avatarLetter || `H`}
               </span>
             )}
             <p className="text-center text-[12px] text-muted-foreground">

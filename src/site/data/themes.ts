@@ -37,10 +37,10 @@ export interface ThemePack {
 }
 
 export const THEME_PACKS: ThemePack[] = [
-  /* ------------------------------ 洛小山 · 默认（恢复内置内容与默认配色） ------------------------------ */
+  /* ------------------------------ HugoW · 默认（恢复内置内容与默认配色） ------------------------------ */
   {
-    id: "luoxiaoshan",
-    name: "洛小山 · 默认",
+    id: "hugow",
+    name: "HugoW · 默认",
     tagline: "个人 IP 站点的内置内容与默认配色（活力橙 + 亮紫）",
     accent: "#ff5d01",
     accent2: "#8b5cf6",
@@ -1518,7 +1518,7 @@ export const THEME_BY_ID = Object.fromEntries(THEME_PACKS.map((t) => [t.id, t]))
 /* 每套一个演示面板，展示该行业最典型的一张运营台账。                   */
 /* ------------------------------------------------------------------ */
 export const PACK_DEMOS: Record<string, DemoPanel[]> = {
-  luoxiaoshan: DEMOS,
+  hugow: DEMOS,
   education: [
     {
       id: "edu-ops",

@@ -124,12 +124,12 @@ export function HomePage() {
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
-                    alt="洛小山 拟卡通形象"
+                    alt="HugoW 拟卡通形象"
                     className="mx-auto size-32 rounded-full border-4 border-card/80 object-cover shadow-glow md:size-36"
                   />
                 ) : (
                   <div className="mx-auto grid size-32 place-items-center rounded-full border-4 border-card/80 bg-gradient-to-br from-primary to-accent2 text-[52px] font-extrabold text-white shadow-glow md:size-36">
-                    {theme.avatarLetter || "洛"}
+                    {theme.avatarLetter || "H"}
                   </div>
                 )}
 
