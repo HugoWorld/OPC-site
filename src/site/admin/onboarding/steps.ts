@@ -40,8 +40,8 @@ export interface StepDef {
   kind: StepKind
   /** 对应工作台导航 tab，点击「去处理」时跳转 */
   tab?: string
-  /** 手动步骤的界面入口指引（manual 类型使用） */
-  guide?: string[]
+  /** 手动步骤的常见卡点 / 前置条件（manual 类型使用） */
+  tips?: string[]
   /** 该步取值是否由系统推导（true 时界面只读展示，不给输入框） */
   derived?: boolean
   check: (cfg: OnboardingConfig, marks: ManualMarks, ctx: StepCheckContext) => Promise<CheckResult>
@@ -148,37 +148,36 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "publish",
     title: "发布飞书应用版本",
-    desc: "平台必经步骤，权限与机器人发布后才生效，无法用接口绕过。",
+    desc: "应用默认只是「开发中」，只有发布出一个版本，权限和机器人才会真正生效。这是平台必经环节，接口绕不过去，按下面的三步点几下就好。",
     kind: "manual",
     tab: "overview",
-    guide: [
-      "打开飞书开放平台 → 本应用 →「版本管理与发布」",
-      "创建版本，填写版本号与更新说明，确认可用范围包含你本人",
-      "提交发布；如需管理员审核，等待审核通过",
+    tips: [
+      "可用范围没勾上你本人，下一步「添加文档应用」会搜不到这个应用",
+      "提交后可能进入企业管理员审核，状态显示「已发布」才算真的生效",
     ],
     check: async (_cfg, marks) => {
       await sleep(300)
       return marks.publish
         ? { status: "done", message: "应用版本已发布，权限与机器人已生效" }
-        : { status: "pending", message: "尚未确认发布，请按指引完成后勾选" }
+        : { status: "pending", message: "尚未确认发布，请按图示里的一步两步完成后勾选" }
     },
   },
   {
     id: "collaborator",
     title: "把应用加为多维表格协作者",
-    desc: "应用成为协作者后才能读写数据；发布后在多维表格界面点几下完成。",
+    desc: "应用本身没有密码，它靠「被邀请成为这张多维表格的协作者」来读写你家数据。发布之后在表里点几下就能加上，不用改代码。",
     kind: "manual",
     tab: "overview",
-    guide: [
-      "打开多维表格，点右上角「···」→「更多」→「添加文档应用」",
-      "在窗口中搜索本应用（OPC-site）并选中，权限选可编辑/可管理",
-      "若窗口搜不到，先确认上一步「应用已发布」且可用范围包含你本人",
+    tips: [
+      "应用还没发布，或发布版本可用范围不含你本人 → 搜索框里搜不到",
+      "应用没开通任何云文档权限 → 同样搜不到",
+      "表若开了高级权限，权限要选「可管理」，选「可编辑」仍读不到数据",
     ],
     check: async (_cfg, marks) => {
       await sleep(300)
       return marks.collaborator
         ? { status: "done", message: "应用已成为协作者，应用身份可读写数据" }
-        : { status: "pending", message: "尚未确认授权，请按指引添加文档应用后勾选" }
+        : { status: "pending", message: "尚未确认授权，请按图示添加文档应用后勾选" }
     },
   },
   {

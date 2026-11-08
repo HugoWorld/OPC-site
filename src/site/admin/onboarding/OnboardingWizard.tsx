@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, RefreshCw, Wand2 } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, Info, Loader2, RefreshCw, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,12 +14,60 @@ import { useOnboarding } from "@/site/admin/onboarding/OnboardingProvider"
 import type { OnboardingConfig } from "@/site/admin/onboarding/steps"
 import type { StepStatus } from "@/site/admin/onboarding/steps"
 
+import guidePublish1 from "@/site/assets/onboarding/guide-publish-1.png"
+import guidePublish2 from "@/site/assets/onboarding/guide-publish-2.png"
+import guidePublish3 from "@/site/assets/onboarding/guide-publish-3.png"
+import guideCollab1 from "@/site/assets/onboarding/guide-collab-1.png"
+import guideCollab2 from "@/site/assets/onboarding/guide-collab-2.png"
+import guideCollab3 from "@/site/assets/onboarding/guide-collab-3.png"
+
 type FieldDef = { key: keyof OnboardingConfig; label: string; placeholder: string }
 
 const FIELDS: Record<string, FieldDef[]> = {
   app: [{ key: "appId", label: "App ID", placeholder: "cli_xxxxxxxx" }],
   base: [{ key: "baseToken", label: "Base Token", placeholder: "多维表格 app_token" }],
 }
+
+/** 手动步骤的分步界面图示：一张图对应一个动作，图上红框 + 序号即该点哪里 */
+type Shot = { src: string; caption: string }
+
+const GUIDE_SHOTS: Record<string, Shot[]> = {
+  publish: [
+    {
+      src: guidePublish1,
+      caption:
+        "打开飞书开放平台 → 选中本应用「OPC-site」→ 左侧「应用发布」→「版本管理与发布」，点右上角「创建版本」。",
+    },
+    {
+      src: guidePublish2,
+      caption:
+        "在版本详情里填版本号（如 1.0.0）和一句更新说明，可用范围保持「仅我」即可，然后点「保存」。",
+    },
+    {
+      src: guidePublish3,
+      caption:
+        "保存后回到版本详情页，点右侧「申请线上发布」。若弹出确认框点了取消，这里同样能补提交。",
+    },
+  ],
+  collaborator: [
+    {
+      src: guideCollab1,
+      caption:
+        "打开这张多维表格，点右上角「···」，在菜单最后选「···更多」，再展开「添加文档应用」。",
+    },
+    {
+      src: guideCollab2,
+      caption:
+        "弹窗里搜索「OPC-site」，选中带「企业自建应用」标签的那条，再点「添加」。",
+    },
+    {
+      src: guideCollab3,
+      caption:
+        "权限选「可编辑」；如果这张表开启了高级权限，要选「可管理」，否则应用仍读不到数据。",
+    },
+  ],
+}
+
 
 /** 只读的「系统已自动生成」展示块 */
 function DerivedRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -60,6 +108,7 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
   const step = ob.activeSteps.find((s) => s.id === ob.currentStep) ?? ob.activeSteps[0]
   const status = ob.statuses[step.id]
   const fields = FIELDS[step.id]
+  const shots = GUIDE_SHOTS[step.id]
 
   // 第一步：模式选择
   if (step.id === "mode") {
@@ -139,21 +188,54 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
         </div>
       )}
 
-      {step.kind === "manual" && step.guide && (
-        <div className="rounded-xl border border-border bg-muted/30 p-4">
-          <ol className="m-0 list-decimal space-y-1.5 pl-4 text-[12.5px] leading-relaxed">
-            {step.guide.map((g, i) => (
-              <li key={i}>{g}</li>
-            ))}
-          </ol>
-          <label className="mt-3 flex items-center gap-2 text-[12.5px] font-medium">
+      {step.kind === "manual" && shots && (
+        <div className="space-y-3">
+          {shots.map((s, i) => (
+            <figure key={s.src} className="m-0 overflow-hidden rounded-xl border border-border bg-card">
+              <a
+                href={s.src}
+                target="_blank"
+                rel="noreferrer"
+                title="点击查看大图"
+                className="block border-b border-border bg-muted/20"
+              >
+                <img
+                  src={s.src}
+                  alt={`第 ${i + 1} 步界面位置示意`}
+                  loading="lazy"
+                  className="w-full"
+                />
+              </a>
+              <figcaption className="flex gap-2 px-3 py-2.5">
+                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                  {i + 1}
+                </span>
+                <span className="text-[12.5px] leading-relaxed text-muted-foreground">{s.caption}</span>
+              </figcaption>
+            </figure>
+          ))}
+
+          {step.tips && step.tips.length > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-amber-700">
+                <Info className="size-3.5" /> 卡住了先看这里
+              </div>
+              <ul className="m-0 list-disc space-y-1 pl-4 text-[12px] leading-relaxed text-amber-800">
+                {step.tips.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-[12.5px] font-medium">
             <input
               type="checkbox"
               checked={!!ob.marks[step.id]}
               onChange={(e) => ob.setMark(step.id, e.target.checked)}
               className="size-4 accent-emerald-600"
             />
-            我已按指引完成这一步
+            我已按上面的图示完成这一步
           </label>
         </div>
       )}
