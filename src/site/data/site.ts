@@ -85,7 +85,7 @@ export const FOOTER_COLUMNS = [
   {
     title: "联系",
     links: [
-      { label: "预约一次演示", href: "/contact/" },
+      { label: "联系表单", href: "/contact/" },
       { label: "怎么交付", href: "/method/" },
       { label: "关于我", href: "/about/" },
       { label: "隐私政策", href: "/privacy/" },

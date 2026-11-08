@@ -120,33 +120,3 @@ export function CtaBand({
     </section>
   )
 }
-
-/** 桌面端常驻悬浮 CTA 钮（跟随 cta 切片，移动端由吸底条承担）。 */
-export function FloatCta() {
-  const { cta } = useSiteData()
-  return (
-    <Button
-      asChild
-      size="lg"
-      className="fixed right-6 bottom-6 z-40 hidden shadow-lift md:inline-flex"
-      aria-label={cta.label}
-    >
-      <Link to={cta.href}>{cta.label}</Link>
-    </Button>
-  )
-}
-
-/** 移动端吸底 CTA 条（跟随 cta 切片）。 */
-export function MobileCtaBar() {
-  const { cta } = useSiteData()
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur md:hidden">
-      <Button asChild size="lg" className="w-full gap-2">
-        <Link to={cta.href}>
-          {cta.label}
-          <ArrowRight className="size-4" />
-        </Link>
-      </Button>
-    </div>
-  )
-}

@@ -3,7 +3,6 @@ import { lazy, Suspense, useEffect } from "react"
 
 import { SiteStoreProvider, useSiteData } from "@/site/admin/store"
 import { PreviewBridge } from "@/site/components/PreviewBridge"
-import { FloatCta, MobileCtaBar } from "@/site/components/Cta"
 import { Footer } from "@/site/components/Footer"
 import { Header } from "@/site/components/Header"
 import { DynamicPage, DynamicPageView } from "@/site/pages/DynamicPage"
@@ -84,15 +83,13 @@ function ScrollToTop() {
 /** 对外站点统一布局：深色玻璃作用域 + 背景光斑 + 页头/内容/页脚/CTA。 */
 function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="site-dark relative min-h-screen overflow-x-clip pb-16 md:pb-0">
+    <div className="site-dark relative min-h-screen overflow-x-clip">
       {/* 背景光斑 + 细网格，玻璃卡片透出它们才有层次 */}
       <div aria-hidden className="ambient pointer-events-none absolute inset-0 -z-10" />
       <div aria-hidden className="grid-bg pointer-events-none absolute inset-0 -z-10 opacity-[0.35]" />
       <Header />
       <main>{children}</main>
       <Footer />
-      <FloatCta />
-      <MobileCtaBar />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { Link, NavLink } from "react-router-dom"
+import { Link, NavLink, useLocation } from "react-router-dom"
 import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,9 @@ import { useSiteData } from "@/site/admin/store"
  */
 export function Header() {
   const { site, nav, cta, pages } = useSiteData()
+  const { pathname } = useLocation()
+  // 已经在联系页时不重复摆「预约一次演示」（按钮会指向当前页，点了没有反应）
+  const hideCta = pathname.startsWith("/contact")
   // 主导航 = 内置 NAV + 注册表内 inNav 的动态页面（通用化能力）
   const dynamicNav = pages.filter((p) => p.inNav).map((p) => ({ label: p.title, href: `/pages/${p.slug}/` }))
   const items = [...nav, ...dynamicNav]
@@ -46,12 +49,14 @@ export function Header() {
           ))}
         </nav>
 
-        <Button asChild size="sm" className="gap-1.5 shrink-0 shadow-glow">
-          <Link to={cta.href}>
-            {cta.label}
-            <ArrowRight className="size-3.5" />
-          </Link>
-        </Button>
+        {hideCta ? null : (
+          <Button asChild size="sm" className="gap-1.5 shrink-0 shadow-glow">
+            <Link to={cta.href}>
+              {cta.label}
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
+        )}
       </div>
     </header>
   )
