@@ -96,23 +96,44 @@ export function tailOpenId(openId?: string) {
 export interface TableManifest {
   key: string
   label: string
+  /** 这张表管什么（给运营看，比 table_id 有用） */
+  hint: string
   tableId: string
 }
 
 export const TABLE_MANIFEST: TableManifest[] = [
-  { key: "site_config", label: "站点配置", tableId: "tblmk0h49rjsRu09" },
-  { key: "home_blocks", label: "首页区块", tableId: "tblUJEXb3NKPl8P0" },
-  { key: "solutions", label: "能力方案", tableId: "tblkYSF2mEGSIqiO" },
-  { key: "articles", label: "文章", tableId: "tblg3kW0m8Rxq7IF" },
-  { key: "products", label: "产品", tableId: "tblnIFxJ3fXalWpg" },
-  { key: "shares", label: "分享", tableId: "tblTMRCdcrM3VxMU" },
-  { key: "pages", label: "自定义页面", tableId: "tblDUFpEdPmsZoWZ" },
-  { key: "method_faq", label: "方法与 FAQ", tableId: "tblwqrEvsJn3UlXd" },
-  { key: "about", label: "关于我", tableId: "tbluHzMJbE3MdtAg" },
-  { key: "theme", label: "主题与排版", tableId: "tbl1MYrfFpvFf4d8" },
-  { key: "samples_testimonials", label: "样例与好评", tableId: "tblgX27LxBmepNpx" },
-  { key: "audit_log", label: "操作审计", tableId: "tblOaWUnCJKo7tJy" },
+  { key: "site_config", label: "站点配置", hint: "站名、域名、SEO 等全局设置", tableId: "tblmk0h49rjsRu09" },
+  { key: "home_blocks", label: "首页区块", hint: "首页每个板块的标题与顺序", tableId: "tblUJEXb3NKPl8P0" },
+  { key: "solutions", label: "能力方案", hint: "能力方案条目与详情", tableId: "tblkYSF2mEGSIqiO" },
+  { key: "articles", label: "文章", hint: "文章与案例正文", tableId: "tblg3kW0m8Rxq7IF" },
+  { key: "products", label: "产品", hint: "产品 / 服务卡片", tableId: "tblnIFxJ3fXalWpg" },
+  { key: "shares", label: "分享", hint: "对外分享的链接与素材", tableId: "tblTMRCdcrM3VxMU" },
+  { key: "pages", label: "自定义页面", hint: "自定义页面的区块结构", tableId: "tblDUFpEdPmsZoWZ" },
+  { key: "method_faq", label: "方法与 FAQ", hint: "方法页与常见问题", tableId: "tblwqrEvsJn3UlXd" },
+  { key: "about", label: "关于我", hint: "人物介绍与履历", tableId: "tbluHzMJbE3MdtAg" },
+  { key: "theme", label: "主题与排版", hint: "主题色与排版微调", tableId: "tbl1MYrfFpvFf4d8" },
+  { key: "samples_testimonials", label: "样例与好评", hint: "演示样例与好评墙", tableId: "tblgX27LxBmepNpx" },
+  { key: "audit_log", label: "操作审计", hint: "谁在什么时候改了什么", tableId: "tblOaWUnCJKo7tJy" },
 ]
+
+/** 已预置的数据后端（本项目就是这一张表，运营管理员不需要自己找） */
+export const BASE_PRESET = {
+  token: "QYRqbmk9TaalWjsf1V5cp0qDnoX",
+  name: "HugoW 个人专业门户数据",
+  url: "https://my.feishu.cn/base/QYRqbmk9TaalWjsf1V5cp0qDnoX",
+}
+
+/**
+ * 从粘贴内容里取出 base_token（app_token）。
+ * 支持：完整多维表格链接（https://xxx.feishu.cn/base/XXX）、wiki 链接、或直接粘贴的裸 token。
+ */
+export function parseBaseToken(input: string): string {
+  const s = input.trim()
+  const url = s.match(/\/(?:base|wiki)\/([A-Za-z0-9]{16,})/)
+  if (url) return url[1]
+  if (/^[A-Za-z0-9]{16,}$/.test(s)) return s
+  return ""
+}
 
 export const ONBOARDING_STEPS: StepDef[] = [
   {
@@ -125,7 +146,7 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "app",
     title: "飞书应用与机器人",
-    desc: "确认这是你的飞书应用。App ID 可在开放平台「凭证与基础信息」查看，不是密钥。",
+    desc: "本次要接入的应用已经预置好，通常不需要改。只有换应用时才需要填 App ID（在「凭证与基础信息」里，不是密钥）。",
     kind: "auto",
     tab: "overview",
     check: async (cfg) => {
@@ -139,7 +160,7 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "base",
     title: "数据后端与 12 张表",
-    desc: "系统会逐张核对这张多维表格里的 12 张表：默认灰态，核对通过的自动打勾。缺表或结构不全的，可以一键补齐，不需要你手动建表。",
+    desc: "多维表格已预置，这一步也不需要你动手：系统会逐张核对里面的 12 张表，默认灰态，通过即打勾，缺表可一键补齐。真要换表时，粘贴完整链接就行，不用去找 token。",
     kind: "auto",
     tab: "overview",
     check: async (cfg) => {

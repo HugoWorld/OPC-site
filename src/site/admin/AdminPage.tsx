@@ -41,7 +41,7 @@ import {
 import { GroupedEditor } from "@/site/admin/forms"
 import { PageManager } from "@/site/admin/PageManager"
 import { OnboardingProvider } from "@/site/admin/onboarding/OnboardingProvider"
-import { OnboardingWizard } from "@/site/admin/onboarding/OnboardingWizard"
+import { OnboardingChip, OnboardingWizard } from "@/site/admin/onboarding/OnboardingWizard"
 import { SetupChecklist } from "@/site/admin/onboarding/SetupChecklist"
 import { THEME_PACKS, PACK_DEMOS, type ThemePack } from "@/site/data/themes"
 
@@ -1226,6 +1226,7 @@ export function AdminPage() {
                 发布全部
               </Button>
             )}
+            <OnboardingChip />
             <Button asChild variant="ghost" size="sm" className="gap-1.5">
               <a href="#/" rel="noreferrer">
                 <ExternalLink className="size-3.5" />

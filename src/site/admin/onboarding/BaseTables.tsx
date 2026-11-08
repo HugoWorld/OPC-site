@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckCircle2, Circle, Loader2, RefreshCw, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -22,10 +22,9 @@ function idleRows(): Record<string, RowState> {
  * 说明：当前为本地模拟核对（无网关时的占位），接入网关后把 inspect 换成真实接口即可，
  * 界面与状态机不变。
  */
-export function BaseTablePanel() {
+export function BaseTablePanel({ token }: { token: string }) {
   const [rows, setRows] = useState<Record<string, RowState>>(idleRows)
   const [busy, setBusy] = useState(false)
-  const started = useRef(false)
 
   const inspect = async () => {
     setBusy(true)
@@ -52,11 +51,10 @@ export function BaseTablePanel() {
   }
 
   useEffect(() => {
-    if (started.current) return
-    started.current = true
     void inspect()
+    // 换表（token 变化）时自动重跑，保持「一进来就在核对」的体感
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [token])
 
   const ready = TABLE_MANIFEST.filter((t) => rows[t.key] === "ready").length
   const missing = TABLE_MANIFEST.length - ready
@@ -84,24 +82,26 @@ export function BaseTablePanel() {
         {TABLE_MANIFEST.map((t) => {
           const st = rows[t.key]
           return (
-            <div key={t.key} className="flex items-center gap-2 rounded px-2.5 py-1.5">
+            <div key={t.key} className="flex items-start gap-2 rounded px-2.5 py-1.5">
               {st === "ready" ? (
-                <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
               ) : st === "checking" ? (
-                <Loader2 className="size-4 shrink-0 animate-spin text-blue-600" />
+                <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-blue-600" />
               ) : (
-                <Circle className="size-4 shrink-0 text-muted-foreground/50" />
+                <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
               )}
-              <span
-                className={`min-w-0 flex-1 truncate text-[12.5px] ${
-                  st === "ready" ? "text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                {t.label}
-              </span>
-              <span className="font-mono text-[10.5px] text-muted-foreground/70">
-                …{t.tableId.slice(-4)}
-              </span>
+              <div className="min-w-0 flex-1">
+                <div
+                  className={`truncate text-[12.5px] leading-tight ${
+                    st === "ready" ? "text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  {t.label}
+                </div>
+                <div className="mt-0.5 truncate text-[10.5px] leading-tight text-muted-foreground/80">
+                  {t.hint}
+                </div>
+              </div>
             </div>
           )
         })}
@@ -109,10 +109,14 @@ export function BaseTablePanel() {
 
       <div className="flex items-center justify-between gap-2 border-t border-border px-3.5 py-2.5">
         <div className="text-[11.5px] text-muted-foreground">
-          {missing > 0 ? `发现 ${missing} 张表未就绪` : "12 张表结构完整，无需补齐"}
+          {busy
+            ? "正在逐张核对，稍等片刻"
+            : missing > 0
+              ? `发现 ${missing} 张表未就绪，可一键补齐`
+              : `${TABLE_MANIFEST.length} 张表结构完整，无需补齐`}
         </div>
         <Button
-          variant={missing > 0 ? "default" : "outline"}
+          variant={!busy && missing > 0 ? "default" : "outline"}
           size="sm"
           className="gap-1"
           disabled={busy || missing === 0}

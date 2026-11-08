@@ -1,4 +1,5 @@
-import { CheckCircle2, ChevronLeft, ChevronRight, Info, Loader2, RefreshCw, Wand2 } from "lucide-react"
+import { useState } from "react"
+import { CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, Info, Loader2, RefreshCw, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,14 +13,114 @@ import {
 } from "@/components/ui/sheet"
 import { useOnboarding } from "@/site/admin/onboarding/OnboardingProvider"
 import { BaseTablePanel } from "@/site/admin/onboarding/BaseTables"
-import type { OnboardingConfig } from "@/site/admin/onboarding/steps"
+import { BASE_PRESET, parseBaseToken } from "@/site/admin/onboarding/steps"
 import type { StepStatus } from "@/site/admin/onboarding/steps"
 
-type FieldDef = { key: keyof OnboardingConfig; label: string; placeholder: string }
+/** 已预置的应用：默认只读展示，换应用才展开输入 */
+function AppPreset() {
+  const ob = useOnboarding()
+  const [editing, setEditing] = useState(false)
+  const ok = /^cli_[a-z0-9]{12,}$/i.test(ob.config.appId.trim())
 
-const FIELDS: Record<string, FieldDef[]> = {
-  app: [{ key: "appId", label: "App ID", placeholder: "cli_xxxxxxxx" }],
-  base: [{ key: "baseToken", label: "Base Token", placeholder: "多维表格 app_token" }],
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border border-border bg-card p-3.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-semibold">OPC-site</div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{ob.config.appId}</div>
+          </div>
+          <span
+            className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] ${
+              ok ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700"
+            }`}
+          >
+            {ok ? "已预置" : "格式不对"}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="mt-2 text-[11.5px] font-medium text-primary hover:underline"
+        >
+          {editing ? "收起" : "换一个应用"}
+        </button>
+      </div>
+
+      {editing && (
+        <div className="space-y-1.5">
+          <label className="text-[12.5px] font-medium">App ID</label>
+          <Input
+            value={ob.config.appId}
+            placeholder="cli_xxxxxxxx"
+            onChange={(e) => ob.updateConfig({ appId: e.target.value })}
+            className="h-10 text-[13px]"
+          />
+          <div className={`text-[11px] ${ok ? "text-emerald-700" : "text-amber-700"}`}>
+            {ok ? "格式正确，可以继续" : "App ID 应以 cli_ 开头，长度 16 位以上"}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 已预置的多维表格：只读展示名称与入口，换表时粘贴完整链接自动识别 */
+function BasePreset() {
+  const ob = useOnboarding()
+  const [editing, setEditing] = useState(false)
+  const [raw, setRaw] = useState("")
+  const ok = ob.config.baseToken.trim().length >= 16
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border border-border bg-card p-3.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-semibold">{BASE_PRESET.name}</div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+              已预置　…{ob.config.baseToken.slice(-6)}
+            </div>
+          </div>
+          <a
+            href={BASE_PRESET.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex shrink-0 items-center gap-0.5 text-[11.5px] font-medium text-primary hover:underline"
+          >
+            打开表格 <ExternalLink className="size-3" />
+          </a>
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="mt-2 text-[11.5px] font-medium text-primary hover:underline"
+        >
+          {editing ? "收起" : "换一张表"}
+        </button>
+      </div>
+
+      {editing && (
+        <div className="space-y-1.5">
+          <label className="text-[12.5px] font-medium">多维表格链接</label>
+          <Input
+            value={raw}
+            placeholder="粘贴浏览器地址栏的完整链接即可"
+            onChange={(e) => {
+              const v = e.target.value
+              setRaw(v)
+              const token = parseBaseToken(v)
+              if (token) ob.updateConfig({ baseToken: token })
+            }}
+            className="h-10 text-[13px]"
+          />
+          <div className="text-[11px] text-muted-foreground">
+            {ok ? `已识别到标识 …${ob.config.baseToken.slice(-6)}，无需再找 token` : "粘贴后会自动识别，也可以直接粘贴 token"}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 
@@ -61,7 +162,6 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
   const ob = useOnboarding()
   const step = ob.activeSteps.find((s) => s.id === ob.currentStep) ?? ob.activeSteps[0]
   const status = ob.statuses[step.id]
-  const fields = FIELDS[step.id]
 
   // 第一步：模式选择
   if (step.id === "mode") {
@@ -80,10 +180,20 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
               ob.mode === o.value ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
             }`}
           >
-            <div className="text-[14.5px] font-semibold">{o.title}</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[14.5px] font-semibold">{o.title}</div>
+              {ob.mode === o.value && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] font-medium text-primary">
+                  当前选择
+                </span>
+              )}
+            </div>
             <div className="mt-1 text-[12.5px] text-muted-foreground">{o.desc}</div>
           </button>
         ))}
+        <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+          默认已选「飞书后端」，点「下一步」即按此模式继续；选「纯本地模式」会直接完成初始化。
+        </p>
       </div>
     )
   }
@@ -92,23 +202,13 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
     <div className="space-y-4">
       <p className="text-[13px] leading-relaxed text-muted-foreground">{step.desc}</p>
 
-      {fields && (
-        <div className="space-y-3">
-          {fields.map((f) => (
-            <div key={f.key} className="space-y-1.5">
-              <label className="text-[12.5px] font-medium">{f.label}</label>
-              <Input
-                value={ob.config[f.key]}
-                placeholder={f.placeholder}
-                onChange={(e) => ob.updateConfig({ [f.key]: e.target.value })}
-                className="h-10 text-[13px]"
-              />
-            </div>
-          ))}
-        </div>
+      {step.id === "app" && <AppPreset />}
+      {step.id === "base" && (
+        <>
+          <BasePreset />
+          <BaseTablePanel token={ob.config.baseToken} />
+        </>
       )}
-
-      {/* 系统自动生成的项：只读展示，不给输入框 */}
       {step.derived && step.id === "gateway" && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-700">
@@ -123,8 +223,6 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
           )}
         </div>
       )}
-
-      {step.id === "base" && <BaseTablePanel />}
 
       {step.kind === "manual" && (step.path || step.tips) && (
         <div className="space-y-3">
@@ -168,20 +266,23 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
         </div>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full gap-2"
-        disabled={status === "in_progress"}
-        onClick={() => ob.runCheck(step.id)}
-      >
-        {status === "in_progress" ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <RefreshCw className="size-4" />
-        )}
-        {status === "done" ? "重新检测" : "自动检测当前状态"}
-      </Button>
+      {/* 第 3 步与手动步骤的状态由面板/勾选自动驱动，不再重复给一个检测按钮 */}
+      {step.kind === "auto" && step.id !== "base" && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full gap-2"
+          disabled={status === "in_progress"}
+          onClick={() => ob.runCheck(step.id)}
+        >
+          {status === "in_progress" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw className="size-4" />
+          )}
+          {status === "done" ? "重新检测" : "自动检测当前状态"}
+        </Button>
+      )}
 
       <StatusLine status={status} message={ob.messages[step.id]} />
 
@@ -198,6 +299,22 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
         </button>
       )}
     </div>
+  )
+}
+
+/** 顶栏常驻入口：初始化未完成时随时可回到向导，避免「稍后再配」之后找不到入口 */
+export function OnboardingChip() {
+  const ob = useOnboarding()
+  if (ob.finished) return null
+  return (
+    <button
+      type="button"
+      onClick={() => ob.openWizard()}
+      className="hidden items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11.5px] font-medium text-amber-700 hover:border-amber-500/60 md:flex"
+    >
+      <Wand2 className="size-3.5" />
+      初始化 {ob.progress}%
+    </button>
   )
 }
 
@@ -235,7 +352,7 @@ export function OnboardingWizard({ onNavigateTab }: { onNavigateTab?: (tab: stri
               <ChevronLeft className="size-4" /> 上一步
             </Button>
             <Button variant="ghost" size="sm" onClick={ob.closeWizard}>
-              稍后处理
+              稍后再配
             </Button>
             <Button size="sm" onClick={ob.next} disabled={isLast} className="gap-1">
               下一步 <ChevronRight className="size-4" />

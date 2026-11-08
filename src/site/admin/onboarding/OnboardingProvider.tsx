@@ -173,9 +173,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const stepIndex = activeSteps.findIndex((s) => s.id === currentStep)
   const next = useCallback(() => {
+    // 第 1 步的默认选择（飞书后端）在点「下一步」时即视为确认，避免进度停在 0%
+    if (currentStep === "mode" && mode === "feishu") {
+      setStatuses((s) => (s.mode === "done" ? s : { ...s, mode: "done" }))
+    }
     const i = activeSteps.findIndex((s) => s.id === currentStep)
     if (i >= 0 && i < activeSteps.length - 1) setCurrentStep(activeSteps[i + 1].id)
-  }, [activeSteps, currentStep])
+  }, [activeSteps, currentStep, mode])
 
   const prev = useCallback(() => {
     const i = activeSteps.findIndex((s) => s.id === currentStep)
