@@ -401,7 +401,15 @@ function SliceEditor<K extends SliceKey>({
                 variant="ghost"
                 size="sm"
                 className="gap-1.5 text-muted-foreground"
-                onClick={() => resetSlice(sliceKey)}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `恢复默认会把「${title}」的草稿改回内置数据，本模块未发布的修改会丢失（其他模块不受影响）。确定继续？`,
+                    )
+                  ) {
+                    resetSlice(sliceKey)
+                  }
+                }}
               >
                 <RefreshCcw className="size-3.5" />
                 恢复默认
@@ -1187,7 +1195,12 @@ export function AdminPage() {
       case "writing":
         return (
           <>
-            <SliceEditor sliceKey="articles" title="文章" desc="status 为 published 才会展示。" onLocate={onLocate} />
+            <SliceEditor
+              sliceKey="articles"
+              title="文章"
+              desc="status 为 published 才会展示。注意：应用主题包会用该包自带的样例文章替换这里的内容，误覆盖时点右上「恢复默认」可回到内置文章（7 篇）。"
+              onLocate={onLocate}
+            />
             <div className="mt-4" />
             <SliceEditor sliceKey="samples" title="交付物样例" desc="案例页展示的脱敏样例。" onLocate={onLocate} />
           </>
