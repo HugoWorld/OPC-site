@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, RefreshCw, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,11 +19,17 @@ type FieldDef = { key: keyof OnboardingConfig; label: string; placeholder: strin
 const FIELDS: Record<string, FieldDef[]> = {
   app: [{ key: "appId", label: "App ID", placeholder: "cli_xxxxxxxx" }],
   base: [{ key: "baseToken", label: "Base Token", placeholder: "多维表格 app_token" }],
-  gateway: [
-    { key: "gatewayUrl", label: "网关地址", placeholder: "https://your-gateway/" },
-    { key: "callbackUrl", label: "回调地址", placeholder: "https://your-site/callback" },
-  ],
-  admin: [{ key: "adminOpenId", label: "管理员 Open ID", placeholder: "ou_xxxxxxxx" }],
+}
+
+/** 只读的「系统已自动生成」展示块 */
+function DerivedRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+      <div className="text-[11.5px] font-medium text-muted-foreground">{label}</div>
+      <div className="mt-0.5 break-all font-mono text-[12px] text-foreground">{value || "—"}</div>
+      {hint && <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{hint}</div>}
+    </div>
+  )
 }
 
 function StatusLine({ status, message }: { status?: StepStatus; message?: string }) {
@@ -97,6 +103,39 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 系统自动生成的项：只读展示，不给输入框 */}
+      {step.derived && step.id === "gateway" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-700">
+            <Wand2 className="size-3.5" /> 已按你的站点地址自动生成
+          </div>
+          <DerivedRow label="网关地址" value={ob.derived.gatewayUrl} hint="站点域名下的 /api，由平台自动路由" />
+          <DerivedRow label="回调地址" value={ob.derived.callbackUrl} hint="登录完成后回到工作台" />
+          {ob.derived.isLocal && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] leading-relaxed text-amber-700">
+              当前是本地开发地址。正式部署到云平台后，这两个地址会随域名自动变化，无需重新配置。
+            </div>
+          )}
+        </div>
+      )}
+
+      {step.derived && step.id === "admin" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-700">
+            <Wand2 className="size-3.5" /> 已从当前登录账号自动识别
+          </div>
+          <DerivedRow
+            label="管理员"
+            value={
+              ob.sessionOpenId
+                ? `${ob.sessionName ?? "已登录"}　尾号 ${ob.sessionOpenId.slice(-4)}`
+                : "—"
+            }
+            hint="完整标识只保存在服务端白名单，界面仅显示尾号"
+          />
         </div>
       )}
 

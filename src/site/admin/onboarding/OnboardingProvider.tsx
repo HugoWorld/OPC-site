@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import {
   DEFAULT_CONFIG,
   ONBOARDING_STEPS,
+  deriveEndpoints,
   type CheckResult,
   type ManualMarks,
   type OnboardingConfig,
@@ -10,6 +11,7 @@ import {
   type StepDef,
   type StepStatus,
 } from "@/site/admin/onboarding/steps"
+import { loadSession } from "@/site/admin/auth"
 
 const STATE_KEY = "hugow-onboarding-state-v1"
 
@@ -35,6 +37,11 @@ interface OnboardingContextValue {
   activeSteps: StepDef[]
   progress: number
   doneCount: number
+  /** 系统按站点域名推导出的网关/回调地址（只读展示） */
+  derived: { origin: string; gatewayUrl: string; callbackUrl: string; isLocal: boolean }
+  /** 当前登录会话（管理员身份来源） */
+  sessionName?: string
+  sessionOpenId?: string
   setMode: (mode: OnboardingMode) => void
   updateConfig: (patch: Partial<OnboardingConfig>) => void
   setMark: (stepId: string, value: boolean) => void
@@ -60,8 +67,25 @@ function loadPersisted(): Partial<PersistedState> {
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const persisted = useMemo(loadPersisted, [])
+  // 登录会话：管理员身份与网关地址都从这里自动推导，不让用户手填
+  const session = useMemo(loadSession, [])
+  const endpoints = useMemo(deriveEndpoints, [])
+  const checkCtx = useMemo(
+    () => ({ openId: session?.openId, userName: session?.name }),
+    [session],
+  )
+
   const [mode, setModeState] = useState<OnboardingMode>(persisted.mode ?? "feishu")
-  const [config, setConfig] = useState<OnboardingConfig>({ ...DEFAULT_CONFIG, ...(persisted.config ?? {}) })
+  const [config, setConfig] = useState<OnboardingConfig>(() => {
+    // 网域与管理员身份始终以「当前环境 + 当前登录」为准，不允许沿用历史值
+    const base = { ...DEFAULT_CONFIG, ...(persisted.config ?? {}) }
+    return {
+      ...base,
+      gatewayUrl: endpoints.gatewayUrl,
+      callbackUrl: endpoints.callbackUrl,
+      adminOpenId: session?.openId ?? "",
+    }
+  })
   const [marks, setMarks] = useState<ManualMarks>(persisted.marks ?? {})
   const [statuses, setStatuses] = useState<Record<string, StepStatus>>(persisted.statuses ?? {})
   const [messages, setMessages] = useState<Record<string, string>>(persisted.messages ?? {})
@@ -125,7 +149,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       const step = ONBOARDING_STEPS.find((s) => s.id === stepId)
       if (!step) return { status: "pending" as StepStatus, message: "步骤不存在" }
       setStatuses((s) => ({ ...s, [stepId]: "in_progress" }))
-      const result = await step.check(config, marks)
+      const result = await step.check(config, marks, checkCtx)
       setStatuses((s) => ({ ...s, [stepId]: result.status }))
       setMessages((m) => ({ ...m, [stepId]: result.message }))
       if (stepId === "verify" && result.status === "done") {
@@ -134,7 +158,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       }
       return result
     },
-    [config, marks],
+    [config, marks, checkCtx],
   )
 
   const goToStep = useCallback((stepId: string) => setCurrentStep(stepId), [])
@@ -163,12 +187,26 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setWizardOpen(true)
   }, [])
 
+  // 进入某步即自动检测，用户无需再点「自动检测」（手动步骤除外）
+  useEffect(() => {
+    if (!wizardOpen) return
+    const step = activeSteps.find((s) => s.id === currentStep)
+    if (!step || step.kind === "manual" || step.kind === "choice") return
+    if (statuses[step.id]) return
+    void runCheck(step.id)
+    // 仅在切步 / 打开向导时触发，状态变化不再重跑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, wizardOpen])
+
   const doneCount = activeSteps.filter((s) => statuses[s.id] === "done").length
   const progress = Math.round((doneCount / activeSteps.length) * 100)
 
   const value: OnboardingContextValue = {
     mode, config, marks, statuses, messages, wizardOpen, currentStep, finished,
     activeSteps, progress, doneCount,
+    derived: endpoints,
+    sessionName: session?.name,
+    sessionOpenId: session?.openId,
     setMode, updateConfig, setMark, runCheck, goToStep,
     openWizard, closeWizard, next, prev, reset,
   }
