@@ -621,9 +621,27 @@ function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
 function ThemeEditor() {
   const { data, setSlices } = useSiteStore()
   const theme = data.theme
+  /** 最近一次主题应用的快照：用它可以一键还原被覆盖的内容（可撤销，不用怕点错） */
+  const [undo, setUndo] = useState<{ name: string; slices: Partial<EditableData> } | null>(null)
 
   /** 应用整套主题包：覆盖内容切片 + 设计令牌（accent / accent2 / density） */
   const applyPack = (pack: ThemePack) => {
+    const ok = window.confirm(
+      `应用「${pack.name}」会用这套主题覆盖以下内容：\n· 首页人设、数字条与模块文案\n· 能力模块、文章样例、演示卡\n· 配色与排版密度\n\n覆盖结果写入草稿（未发布不影响前台），应用后可点「撤销本次应用」还原。继续？`,
+    )
+    if (!ok) return
+    const snapshot: Partial<EditableData> = {
+      hero: data.hero,
+      stats: data.stats,
+      valueProps: data.valueProps,
+      audiences: data.audiences,
+      solutions: data.solutions,
+      articles: data.articles,
+      samples: data.samples,
+      demos: data.demos,
+      footerBoundary: data.footerBoundary,
+      theme: data.theme,
+    }
     setSlices({
       hero: pack.hero as EditableData["hero"],
       stats: pack.stats as EditableData["stats"],
@@ -636,6 +654,7 @@ function ThemeEditor() {
       footerBoundary: pack.footerBoundary,
       theme: { ...theme, accent: pack.accent, accent2: pack.accent2, density: pack.density },
     })
+    setUndo({ name: pack.name, slices: snapshot })
   }
 
   /** 当前配色是否与该主题一致（用于「当前应用」标记） */
@@ -655,8 +674,26 @@ function ThemeEditor() {
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-1 text-[14px] font-bold">主题库</div>
         <p className="mb-4 text-[12px] text-muted-foreground">
-          每套主题 = 首页内容 + 能力模块 + 文章样例 + 配色与密度。应用会覆盖当前这些内容切片。
+          每套主题 = 首页内容 + 能力模块 + 文章样例 + 配色与密度。应用会覆盖当前这些内容切片，应用前会先确认，应用后可撤销一次。
         </p>
+
+        {undo && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <span className="text-[12px] leading-relaxed text-amber-800">
+              已应用「{undo.name}」，覆盖内容已写入草稿（未发布，前台不受影响）。
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSlices(undo.slices)
+                setUndo(null)
+              }}
+            >
+              撤销本次应用
+            </Button>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {THEME_PACKS.map((pack) => {
             const active = isActivePack(pack)
@@ -948,13 +985,16 @@ function Publish() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-[14px] font-semibold">
-              {hasDraftChanges ? "有未发布的草稿改动" : "草稿与站点已一致"}
+              {hasDraftChanges
+                ? "有未发布的草稿改动"
+                : lastPublishedAt
+                  ? "草稿与站点已一致"
+                  : "尚未发布过：前台当前是内置默认内容"}
             </h3>
             <p className="mt-1 text-[12.5px] text-muted-foreground">
               {lastPublishedAt
-                ? `上次发布：${new Date(lastPublishedAt).toLocaleTimeString()}。`
-                : "尚未发布过。"}
-              已发布切片：{Object.keys(published).length} 个。
+                ? `上次发布：${new Date(lastPublishedAt).toLocaleTimeString()}。已发布切片：${Object.keys(published).length} 个。`
+                : "点「发布全部草稿」把当前草稿推到前台；已发布切片：0 个。"}
             </p>
           </div>
           <Button
@@ -965,7 +1005,7 @@ function Publish() {
             }}
           >
             <Rocket className="size-3.5" />
-            {hasDraftChanges ? "发布全部草稿" : "已是最新"}
+            {hasDraftChanges ? "发布全部草稿" : lastPublishedAt ? "已是最新" : "没有可发布的改动"}
           </Button>
         </div>
       </div>
@@ -1015,12 +1055,33 @@ function Publish() {
             variant="outline"
             size="sm"
             className="gap-1.5 text-destructive"
-            onClick={() => resetSlice()}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "丢弃全部草稿：所有未发布的修改会立即消失，且无法撤销。已发布的内容不受影响。确定继续？",
+                )
+              ) {
+                resetSlice()
+              }
+            }}
           >
             <RefreshCcw className="size-3.5" />
             丢弃全部草稿
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-destructive" onClick={resetPublished}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-destructive"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "重置已发布：站点前台会回到内置默认内容，已发布的修改全部丢失且无法撤销。确定继续？",
+                )
+              ) {
+                resetPublished()
+              }
+            }}
+          >
             <RefreshCcw className="size-3.5" />
             重置已发布为默认
           </Button>
