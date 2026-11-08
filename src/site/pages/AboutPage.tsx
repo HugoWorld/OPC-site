@@ -9,7 +9,9 @@ import { Container, Section } from "@/site/components/Layout"
 
 /** 关于我：履历时间线、三条工作原则、能力边界。（页头标题来自「二级页页面设置」） */
 export function AboutPage() {
-  const { about, theme, pageSettings } = useSiteData()
+  const { about, theme, pageSettings, hero } = useSiteData()
+  // 关于我页与首页共用同一张 IP 头像：主题里填了自定义就优先用，否则回落到内置头像
+  const avatar = theme.avatarUrl || hero.avatarUrl
   return (
     <div data-preview-anchor="about" className="px-6 py-14 md:px-8 md:py-20">
       <Container>
@@ -25,9 +27,9 @@ export function AboutPage() {
         {/* 形象占位 + 自我介绍 */}
         <div className="mt-14 grid gap-10 md:grid-cols-[240px_1fr]">
           <div className="flex flex-col items-center gap-3">
-            {theme.avatarUrl ? (
+            {avatar ? (
               <img
-                src={theme.avatarUrl}
+                src={avatar}
                 alt={theme.avatarLetter || "HugoW 形象"}
                 className="glass-card size-[150px] rounded-2xl object-cover"
               />
