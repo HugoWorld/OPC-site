@@ -40,6 +40,9 @@ import {
 } from "@/site/admin/store"
 import { GroupedEditor } from "@/site/admin/forms"
 import { PageManager } from "@/site/admin/PageManager"
+import { OnboardingProvider } from "@/site/admin/onboarding/OnboardingProvider"
+import { OnboardingWizard } from "@/site/admin/onboarding/OnboardingWizard"
+import { SetupChecklist } from "@/site/admin/onboarding/SetupChecklist"
 import { THEME_PACKS, PACK_DEMOS, type ThemePack } from "@/site/data/themes"
 
 /* ------------------------------------------------------------------ */
@@ -462,6 +465,7 @@ function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
 
   return (
     <div className="space-y-5">
+      <SetupChecklist />
       {/* 顶部：标题 + 状态 + 操作 */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6">
         <div aria-hidden className="ambient pointer-events-none absolute -right-16 -top-16 size-52 opacity-50" />
@@ -1172,6 +1176,7 @@ export function AdminPage() {
   if (!user) return <AdminLoginGate />
 
   return (
+    <OnboardingProvider>
     <div className="min-h-screen bg-background text-foreground">
       {/* 顶栏 */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur">
@@ -1338,6 +1343,8 @@ export function AdminPage() {
         {/* 右侧预览 */}
         <PreviewPane target={previewTarget} />
       </div>
+      <OnboardingWizard onNavigateTab={(t) => setTab(t as TabKey)} />
     </div>
+    </OnboardingProvider>
   )
 }
