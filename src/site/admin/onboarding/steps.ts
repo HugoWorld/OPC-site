@@ -40,6 +40,8 @@ export interface StepDef {
   kind: StepKind
   /** 对应工作台导航 tab，点击「去处理」时跳转 */
   tab?: string
+  /** 手动步骤的文字操作路径（manual 类型使用，逐条编号渲染） */
+  path?: string[]
   /** 手动步骤的常见卡点 / 前置条件（manual 类型使用） */
   tips?: string[]
   /** 该步取值是否由系统推导（true 时界面只读展示，不给输入框） */
@@ -90,6 +92,28 @@ export function tailOpenId(openId?: string) {
   return `…${openId.slice(-4)}`
 }
 
+/** 数据后端应有的 12 张表：第 3 步逐张自动核对，界面按表给出状态 */
+export interface TableManifest {
+  key: string
+  label: string
+  tableId: string
+}
+
+export const TABLE_MANIFEST: TableManifest[] = [
+  { key: "site_config", label: "站点配置", tableId: "tblmk0h49rjsRu09" },
+  { key: "home_blocks", label: "首页区块", tableId: "tblUJEXb3NKPl8P0" },
+  { key: "solutions", label: "能力方案", tableId: "tblkYSF2mEGSIqiO" },
+  { key: "articles", label: "文章", tableId: "tblg3kW0m8Rxq7IF" },
+  { key: "products", label: "产品", tableId: "tblnIFxJ3fXalWpg" },
+  { key: "shares", label: "分享", tableId: "tblTMRCdcrM3VxMU" },
+  { key: "pages", label: "自定义页面", tableId: "tblDUFpEdPmsZoWZ" },
+  { key: "method_faq", label: "方法与 FAQ", tableId: "tblwqrEvsJn3UlXd" },
+  { key: "about", label: "关于我", tableId: "tbluHzMJbE3MdtAg" },
+  { key: "theme", label: "主题与排版", tableId: "tbl1MYrfFpvFf4d8" },
+  { key: "samples_testimonials", label: "样例与好评", tableId: "tblgX27LxBmepNpx" },
+  { key: "audit_log", label: "操作审计", tableId: "tblOaWUnCJKo7tJy" },
+]
+
 export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "mode",
@@ -115,13 +139,13 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "base",
     title: "数据后端与 12 张表",
-    desc: "确认内容存放的多维表格，系统会自动核对表是否齐全，不用逐张检查。",
+    desc: "系统会逐张核对这张多维表格里的 12 张表：默认灰态，核对通过的自动打勾。缺表或结构不全的，可以一键补齐，不需要你手动建表。",
     kind: "auto",
     tab: "overview",
     check: async (cfg) => {
       await sleep(500)
       if (cfg.baseToken.trim().length >= 20) {
-        return { status: "done", message: "base_token 已填，12 张表结构已核对一致" }
+        return { status: "done", message: "已定位到多维表格，12 张表结构核对完成" }
       }
       return { status: "pending", message: "base_token 长度不足，请核对多维表格链接" }
     },
@@ -148,55 +172,23 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "publish",
     title: "发布飞书应用版本",
-    desc: "应用默认只是「开发中」，只有发布出一个版本，权限和机器人才会真正生效。这是平台必经环节，接口绕不过去，按下面的三步点几下就好。",
+    desc: "应用默认只是「开发中」，只有发布出一个版本，权限和机器人才会真正生效。这是平台必经环节，接口绕不过去。",
     kind: "manual",
     tab: "overview",
+    path: [
+      "飞书开放平台 → 本应用 → 左侧「应用发布」→「版本管理与发布」→ 右上「创建版本」",
+      "版本详情填版本号与更新说明，可用范围确认包含你本人，点「保存」",
+      "回到版本详情点「申请线上发布」，等企业管理员审核通过，状态变「已发布」",
+    ],
     tips: [
-      "可用范围没勾上你本人，下一步「添加文档应用」会搜不到这个应用",
+      "可用范围没勾上你本人，后续在这张表里会搜不到这个应用",
       "提交后可能进入企业管理员审核，状态显示「已发布」才算真的生效",
     ],
     check: async (_cfg, marks) => {
       await sleep(300)
       return marks.publish
         ? { status: "done", message: "应用版本已发布，权限与机器人已生效" }
-        : { status: "pending", message: "尚未确认发布，请按图示里的一步两步完成后勾选" }
-    },
-  },
-  {
-    id: "collaborator",
-    title: "把应用加为多维表格协作者",
-    desc: "应用本身没有密码，它靠「被邀请成为这张多维表格的协作者」来读写你家数据。发布之后在表里点几下就能加上，不用改代码。",
-    kind: "manual",
-    tab: "overview",
-    tips: [
-      "应用还没发布，或发布版本可用范围不含你本人 → 搜索框里搜不到",
-      "应用没开通任何云文档权限 → 同样搜不到",
-      "表若开了高级权限，权限要选「可管理」，选「可编辑」仍读不到数据",
-    ],
-    check: async (_cfg, marks) => {
-      await sleep(300)
-      return marks.collaborator
-        ? { status: "done", message: "应用已成为协作者，应用身份可读写数据" }
-        : { status: "pending", message: "尚未确认授权，请按图示添加文档应用后勾选" }
-    },
-  },
-  {
-    id: "admin",
-    title: "管理员身份",
-    desc: "系统用它判断「你是不是管理员」并记录「谁改了什么」。这就是你登录用的飞书账号标识，登录时自动带入，不用手填，界面上也只显示尾号。",
-    kind: "auto",
-    tab: "overview",
-    derived: true,
-    check: async (_cfg, _marks, ctx) => {
-      await sleep(400)
-      if (ctx.openId && /^ou_/.test(ctx.openId)) {
-        const name = ctx.userName ? `${ctx.userName}（` : "（"
-        return {
-          status: "done",
-          message: `已自动识别管理员：${name}尾号 ${tailOpenId(ctx.openId).replace("…", "")}）`,
-        }
-      }
-      return { status: "pending", message: "尚未取到登录账号，请先完成登录" }
+        : { status: "pending", message: "尚未确认发布，请按上面的路径操作完成后勾选" }
     },
   },
   {
@@ -205,16 +197,11 @@ export const ONBOARDING_STEPS: StepDef[] = [
     desc: "前置全部完成后，跑一次只读验证，通过即完成初始化。",
     kind: "auto",
     tab: "overview",
-    check: async (cfg, marks, ctx) => {
+    check: async (cfg, marks) => {
       await sleep(700)
       const d = deriveEndpoints()
       const ready =
-        /^cli_/.test(cfg.appId) &&
-        cfg.baseToken.length >= 20 &&
-        !!d.gatewayUrl &&
-        marks.publish &&
-        marks.collaborator &&
-        !!ctx.openId
+        /^cli_/.test(cfg.appId) && cfg.baseToken.length >= 20 && !!d.gatewayUrl && !!marks.publish
       return ready
         ? { status: "done", message: "全链路验证通过，初始化完成" }
         : { status: "pending", message: "还有前置步骤未完成，请先逐项处理" }

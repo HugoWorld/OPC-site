@@ -90,7 +90,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [statuses, setStatuses] = useState<Record<string, StepStatus>>(persisted.statuses ?? {})
   const [messages, setMessages] = useState<Record<string, string>>(persisted.messages ?? {})
   const [finished, setFinished] = useState<boolean>(persisted.finished ?? false)
-  const [currentStep, setCurrentStep] = useState<string>(persisted.currentStep ?? ONBOARDING_STEPS[0].id)
+  // 步骤会随版本增减：历史持久值里的 currentStep 若已不存在，回落到第一步
+  const [currentStep, setCurrentStep] = useState<string>(() =>
+    ONBOARDING_STEPS.some((s) => s.id === persisted.currentStep)
+      ? (persisted.currentStep as string)
+      : ONBOARDING_STEPS[0].id,
+  )
   const [wizardOpen, setWizardOpen] = useState(false)
 
   const activeSteps = useMemo(
@@ -192,11 +197,23 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (!wizardOpen) return
     const step = activeSteps.find((s) => s.id === currentStep)
     if (!step || step.kind === "manual" || step.kind === "choice") return
-    if (statuses[step.id]) return
+    // 已完成的不重跑；未完成的每次进入都按当前配置重算一次
+    if (statuses[step.id] === "done") return
     void runCheck(step.id)
     // 仅在切步 / 打开向导时触发，状态变化不再重跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, wizardOpen])
+
+  // 手动步骤勾选「已完成」后立刻重算状态，不需要用户再点一次检测
+  useEffect(() => {
+    if (!wizardOpen) return
+    const step = activeSteps.find((s) => s.id === currentStep)
+    if (!step || step.kind !== "manual") return
+    if (!marks[step.id]) return
+    if (statuses[step.id] === "done") return
+    void runCheck(step.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marks, currentStep, wizardOpen])
 
   const doneCount = activeSteps.filter((s) => statuses[s.id] === "done").length
   const progress = Math.round((doneCount / activeSteps.length) * 100)
