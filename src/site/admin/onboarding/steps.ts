@@ -8,8 +8,7 @@
 /* ------------------------------------------------------------------ */
 
 export type StepStatus = "pending" | "in_progress" | "done"
-export type OnboardingMode = "local" | "feishu"
-export type StepKind = "choice" | "auto" | "manual"
+export type StepKind = "auto" | "manual"
 
 export interface OnboardingConfig {
   appId: string
@@ -136,13 +135,6 @@ export function parseBaseToken(input: string): string {
 }
 
 export const ONBOARDING_STEPS: StepDef[] = [
-  {
-    id: "mode",
-    title: "选择运营模式",
-    desc: "决定后续要配置哪些能力。你的目标是 AI Agent 自动化运营，建议选飞书后端。",
-    kind: "choice",
-    check: async () => ({ status: "done", message: "已选择运营模式" }),
-  },
   {
     id: "app",
     title: "飞书应用与机器人",

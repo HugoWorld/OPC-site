@@ -7,7 +7,6 @@ import {
   type CheckResult,
   type ManualMarks,
   type OnboardingConfig,
-  type OnboardingMode,
   type StepDef,
   type StepStatus,
 } from "@/site/admin/onboarding/steps"
@@ -16,7 +15,6 @@ import { loadSession } from "@/site/admin/auth"
 const STATE_KEY = "hugow-onboarding-state-v1"
 
 interface PersistedState {
-  mode: OnboardingMode
   config: OnboardingConfig
   marks: ManualMarks
   statuses: Record<string, StepStatus>
@@ -26,7 +24,6 @@ interface PersistedState {
 }
 
 interface OnboardingContextValue {
-  mode: OnboardingMode
   config: OnboardingConfig
   marks: ManualMarks
   statuses: Record<string, StepStatus>
@@ -42,7 +39,6 @@ interface OnboardingContextValue {
   /** 当前登录会话（管理员身份来源） */
   sessionName?: string
   sessionOpenId?: string
-  setMode: (mode: OnboardingMode) => void
   updateConfig: (patch: Partial<OnboardingConfig>) => void
   setMark: (stepId: string, value: boolean) => void
   runCheck: (stepId: string) => Promise<CheckResult>
@@ -75,7 +71,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     [session],
   )
 
-  const [mode, setModeState] = useState<OnboardingMode>(persisted.mode ?? "feishu")
   const [config, setConfig] = useState<OnboardingConfig>(() => {
     // 网域与管理员身份始终以「当前环境 + 当前登录」为准，不允许沿用历史值
     const base = { ...DEFAULT_CONFIG, ...(persisted.config ?? {}) }
@@ -89,7 +84,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [marks, setMarks] = useState<ManualMarks>(persisted.marks ?? {})
   const [statuses, setStatuses] = useState<Record<string, StepStatus>>(persisted.statuses ?? {})
   const [messages, setMessages] = useState<Record<string, string>>(persisted.messages ?? {})
-  const [finished, setFinished] = useState<boolean>(persisted.finished ?? false)
+  // 只有「连通性验证」真的通过才算初始化完成；旧版纯本地模式留下的 finished 不再冒充完成
+  const [finished, setFinished] = useState<boolean>(
+    Boolean(persisted.finished) && persisted.statuses?.verify === "done",
+  )
   // 步骤会随版本增减：历史持久值里的 currentStep 若已不存在，回落到第一步
   const [currentStep, setCurrentStep] = useState<string>(() =>
     ONBOARDING_STEPS.some((s) => s.id === persisted.currentStep)
@@ -98,10 +96,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   )
   const [wizardOpen, setWizardOpen] = useState(false)
 
-  const activeSteps = useMemo(
-    () => (mode === "feishu" ? ONBOARDING_STEPS : [ONBOARDING_STEPS[0]]),
-    [mode],
-  )
+  const activeSteps = ONBOARDING_STEPS
 
   // 首次登录（未完成）自动弹出向导；已完成则不打扰
   useEffect(() => {
@@ -110,7 +105,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const persist = useCallback(
     (next: {
-      mode: OnboardingMode
       config: OnboardingConfig
       marks: ManualMarks
       statuses: Record<string, StepStatus>
@@ -128,18 +122,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    persist({ mode, config, marks, statuses, messages, finished, currentStep })
-  }, [mode, config, marks, statuses, messages, finished, currentStep, persist])
-
-  const setMode = useCallback((m: OnboardingMode) => {
-    setModeState(m)
-    setStatuses((s) => ({ ...s, mode: "done" }))
-    if (m === "local") {
-      // 纯本地模式：无需飞书配置，直接完成
-      setFinished(true)
-      setWizardOpen(false)
-    }
-  }, [])
+    persist({ config, marks, statuses, messages, finished, currentStep })
+  }, [config, marks, statuses, messages, finished, currentStep, persist])
 
   const updateConfig = useCallback((patch: Partial<OnboardingConfig>) => {
     setConfig((c) => ({ ...c, ...patch }))
@@ -173,13 +157,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const stepIndex = activeSteps.findIndex((s) => s.id === currentStep)
   const next = useCallback(() => {
-    // 第 1 步的默认选择（飞书后端）在点「下一步」时即视为确认，避免进度停在 0%
-    if (currentStep === "mode" && mode === "feishu") {
-      setStatuses((s) => (s.mode === "done" ? s : { ...s, mode: "done" }))
-    }
     const i = activeSteps.findIndex((s) => s.id === currentStep)
     if (i >= 0 && i < activeSteps.length - 1) setCurrentStep(activeSteps[i + 1].id)
-  }, [activeSteps, currentStep, mode])
+  }, [activeSteps, currentStep])
 
   const prev = useCallback(() => {
     const i = activeSteps.findIndex((s) => s.id === currentStep)
@@ -187,7 +167,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [activeSteps, currentStep])
 
   const reset = useCallback(() => {
-    setModeState("feishu")
     setConfig(DEFAULT_CONFIG)
     setMarks({})
     setStatuses({})
@@ -200,7 +179,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!wizardOpen) return
     const step = activeSteps.find((s) => s.id === currentStep)
-    if (!step || step.kind === "manual" || step.kind === "choice") return
+    if (!step || step.kind === "manual") return
     // 已完成的不重跑；未完成的每次进入都按当前配置重算一次
     if (statuses[step.id] === "done") return
     void runCheck(step.id)
@@ -223,12 +202,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const progress = Math.round((doneCount / activeSteps.length) * 100)
 
   const value: OnboardingContextValue = {
-    mode, config, marks, statuses, messages, wizardOpen, currentStep, finished,
+    config, marks, statuses, messages, wizardOpen, currentStep, finished,
     activeSteps, progress, doneCount,
     derived: endpoints,
     sessionName: session?.name,
     sessionOpenId: session?.openId,
-    setMode, updateConfig, setMark, runCheck, goToStep,
+    updateConfig, setMark, runCheck, goToStep,
     openWizard, closeWizard, next, prev, reset,
   }
 

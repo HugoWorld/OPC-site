@@ -616,7 +616,7 @@ function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
           </div>
         </div>
         <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-          表结构与读写契约已冻结，但尚未真实连接：现在无论选哪种模式，发布都写本机浏览器，不构成落库。纯本地模式的数据只在这台电脑上，清缓存或换设备即丢，云端部署的站点读不到；接入网关后此处切为「已接入」，数据才真正落在飞书云端、多设备同步。
+          表结构与读写契约已冻结，但网关未部署，尚未真实连接：发布仍写本机缓存，不构成落库。网关上线后此处切为「已接入」，写入即落到飞书 12 张表，家里电脑和线上站点读的是同一份。
         </p>
       </div>
 

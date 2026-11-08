@@ -163,49 +163,6 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
   const step = ob.activeSteps.find((s) => s.id === ob.currentStep) ?? ob.activeSteps[0]
   const status = ob.statuses[step.id]
 
-  // 第一步：模式选择
-  if (step.id === "mode") {
-    const options = [
-      {
-        value: "feishu" as const,
-        title: "飞书后端 + 自动化",
-        desc: "数据存在飞书多维表格（云端），多设备同步，可交给 AI Agent 值守；需要先部署一个网关保管 App Secret",
-      },
-      {
-        value: "local" as const,
-        title: "纯本地模式",
-        desc: "数据只存这台电脑的浏览器（localStorage），无需网关；换设备、换浏览器或清缓存会丢，也不会同步到云端站点",
-      },
-    ]
-    return (
-      <div className="space-y-3">
-        {options.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => ob.setMode(o.value)}
-            className={`w-full rounded-xl border p-4 text-left transition-colors ${
-              ob.mode === o.value ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[14.5px] font-semibold">{o.title}</div>
-              {ob.mode === o.value && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] font-medium text-primary">
-                  当前选择
-                </span>
-              )}
-            </div>
-            <div className="mt-1 text-[12.5px] text-muted-foreground">{o.desc}</div>
-          </button>
-        ))}
-        <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-          站点要发布到云端做对外门户，选「飞书后端」：数据在云端表里，家里和线上的浏览器看到的是同一份；「纯本地模式」只适合这台电脑自用演示，前台部署后读不到这里的修改。
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <p className="text-[13px] leading-relaxed text-muted-foreground">{step.desc}</p>
