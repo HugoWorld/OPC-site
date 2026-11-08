@@ -616,7 +616,7 @@ function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
           </div>
         </div>
         <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-          本轮只落表结构与读写契约（PRD 附录 A.7），尚未真实连接：发布仍写本机，不构成落库成功。接入后此处切为「已接入」。
+          表结构与读写契约已冻结，但尚未真实连接：现在无论选哪种模式，发布都写本机浏览器，不构成落库。纯本地模式的数据只在这台电脑上，清缓存或换设备即丢，云端部署的站点读不到；接入网关后此处切为「已接入」，数据才真正落在飞书云端、多设备同步。
         </p>
       </div>
 
@@ -1198,7 +1198,7 @@ export function AdminPage() {
             <SliceEditor
               sliceKey="articles"
               title="文章"
-              desc="status 为 published 才会展示。注意：应用主题包会用该包自带的样例文章替换这里的内容，误覆盖时点右上「恢复默认」可回到内置文章（7 篇）。"
+              desc="status 为 published 才会展示。注意：应用主题包会用该包自带的样例文章替换这里的内容，误覆盖时点右上「恢复默认」可回到内置文章（6 篇）。"
               onLocate={onLocate}
             />
             <div className="mt-4" />

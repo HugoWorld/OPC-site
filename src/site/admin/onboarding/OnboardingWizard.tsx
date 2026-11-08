@@ -166,8 +166,16 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
   // 第一步：模式选择
   if (step.id === "mode") {
     const options = [
-      { value: "feishu" as const, title: "飞书后端 + 自动化", desc: "数据上云、多设备同步，支持 AI Agent 无人值守" },
-      { value: "local" as const, title: "纯本地模式", desc: "数据存浏览器，无需网关，适合固定电脑自用" },
+      {
+        value: "feishu" as const,
+        title: "飞书后端 + 自动化",
+        desc: "数据存在飞书多维表格（云端），多设备同步，可交给 AI Agent 值守；需要先部署一个网关保管 App Secret",
+      },
+      {
+        value: "local" as const,
+        title: "纯本地模式",
+        desc: "数据只存这台电脑的浏览器（localStorage），无需网关；换设备、换浏览器或清缓存会丢，也不会同步到云端站点",
+      },
     ]
     return (
       <div className="space-y-3">
@@ -192,7 +200,7 @@ function StepBody({ onNavigateTab }: { onNavigateTab?: (tab: string) => void }) 
           </button>
         ))}
         <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-          默认已选「飞书后端」，点「下一步」即按此模式继续；选「纯本地模式」会直接完成初始化。
+          站点要发布到云端做对外门户，选「飞书后端」：数据在云端表里，家里和线上的浏览器看到的是同一份；「纯本地模式」只适合这台电脑自用演示，前台部署后读不到这里的修改。
         </p>
       </div>
     )
