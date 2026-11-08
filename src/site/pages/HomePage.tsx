@@ -113,22 +113,27 @@ export function HomePage() {
                   src={heroBg}
                   alt=""
                   aria-hidden
-                  className="absolute inset-0 size-full object-cover"
+                  className="absolute inset-0 size-full scale-105 object-cover opacity-40 blur-[3px]"
                 />
               ) : (
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-primary/12 via-accent to-accent2/15" />
               )}
               <div aria-hidden className="ambient pointer-events-none absolute inset-0 opacity-60" />
+              {/* 中心提亮：把头像从背景插画里托出来，避免背景色块压在人脸边上 */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_36%,rgba(255,255,255,0.86),rgba(255,255,255,0.35)_45%,transparent_68%)]"
+              />
 
               <div className="relative">
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
                     alt="HugoW 拟卡通形象"
-                    className="mx-auto size-32 rounded-full border-4 border-card/80 object-cover shadow-glow md:size-36"
+                    className="mx-auto size-40 rounded-full border-[3px] border-card/85 object-cover shadow-glow md:size-56"
                   />
                 ) : (
-                  <div className="mx-auto grid size-32 place-items-center rounded-full border-4 border-card/80 bg-gradient-to-br from-primary to-accent2 text-[52px] font-extrabold text-white shadow-glow md:size-36">
+                  <div className="mx-auto grid size-40 place-items-center rounded-full border-[3px] border-card/85 bg-gradient-to-br from-primary to-accent2 text-[64px] font-extrabold text-white shadow-glow md:size-56">
                     {theme.avatarLetter || "H"}
                   </div>
                 )}
