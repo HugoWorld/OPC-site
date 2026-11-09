@@ -114,8 +114,9 @@ function readEntry(root, rel) {
 
 /** 二进制魔数校验：防止同步/拷贝把图片写成 UTF-8 替换字符 */
 function binaryLooksValid(rel, data) {
-  // UTF-8 文本管道会把 >=0x80 的字节替换成 EF BF BD，这是最常见的损坏特征
-  if (data.includes(Buffer.from([0xef, 0xbf, 0xbd]))) return false
+  // UTF-8 文本管道会把 >=0x80 的字节替换成 EF BF BD。只看头部 64 字节：
+  // 真图片的数据段也可能偶然出现这三个字节，全文件扫描会误杀合法图片。
+  if (data.subarray(0, 64).includes(Buffer.from([0xef, 0xbf, 0xbd]))) return false
   const ext = path.extname(rel).toLowerCase()
   if (ext === ".png") {
     return data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
