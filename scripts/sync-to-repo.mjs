@@ -172,9 +172,13 @@ const changed = [...src.keys()]
 const corrupt = [...repo.keys()]
   .filter((k) => repo.get(k).kind === "binary" && !binaryLooksValid(k, repo.get(k).data))
   .sort()
+// 约定不入库的源图若出现在仓库，同样算漂移（collect 会跳过它们，必须单独查）
+const stray = [...MANIFEST_EXCLUDES]
+  .filter((k) => fs.existsSync(path.join(REPO_ROOT, k)))
+  .sort()
 
 if (CHECK_ONLY) {
-  if (onlySrc.length === 0 && onlyRepo.length === 0 && changed.length === 0 && corrupt.length === 0) {
+  if (onlySrc.length === 0 && onlyRepo.length === 0 && changed.length === 0 && corrupt.length === 0 && stray.length === 0) {
     console.log(`check:sync 通过：prototype 与 _repo/OPC-site 一致（${src.size} 个文件）`)
     process.exit(0)
   }
@@ -183,6 +187,7 @@ if (CHECK_ONLY) {
   for (const f of onlySrc) console.error(`  仅在 prototype：${f}`)
   for (const f of onlyRepo) console.error(`  仅在 _repo：${f}`)
   for (const f of corrupt) console.error(`  二进制损坏：${f}`)
+  for (const f of stray) console.error(`  不应入库：${f}`)
   console.error("修复：npm run sync:repo（同步到 _repo）")
   process.exit(1)
 }
