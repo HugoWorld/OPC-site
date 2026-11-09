@@ -12,7 +12,8 @@
  * 同步范围 = 下方 MANIFEST（src/、scripts/ 与构建配置）。
  * README / LICENSE / .github 属于开源仓库自己的文件，由 docs/repo/ 母本管理，不在此列。
  *
- * 行尾统一：比较与写入都按 LF（\r\n → \n），避免 CRLF/LF 差异造成假漂移。
+ * 行尾统一：文本文件比较与写入都按 LF（\r\n → \n）；图片等二进制按原始字节比较、
+ * 原样写入，绝不能走 UTF-8 文本管道（否则会写入 EF BF BD 替换字符，直接损坏图片）。
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -37,6 +38,33 @@ const MANIFEST_FILES = [
   "admin.html",
 ]
 
+/** 二进制扩展名：按字节比较与复制，不做 UTF-8 解码 */
+const BINARY_EXT = new Set([
+  ".png",
+  ".webp",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".ico",
+  ".avif",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".pdf",
+  ".zip",
+])
+
+/** 本地源图不入库：仓库只保留站内使用的 webp 派生图 */
+const MANIFEST_EXCLUDES = new Set([
+  "src/site/assets/hero-avatar.png",
+  "src/site/assets/hero-bg.png",
+])
+
+function isBinary(rel) {
+  return BINARY_EXT.has(path.extname(rel).toLowerCase())
+}
+
 const args = new Set(process.argv.slice(2))
 const CHECK_ONLY = args.has("--check")
 const FORCE = args.has("--force")
@@ -55,6 +83,7 @@ function listFiles(absRoot, rel = "", out = []) {
   for (const name of fs.readdirSync(dir)) {
     if (name === "node_modules" || name === ".git") continue
     const relPath = rel ? `${rel}/${name}` : name
+    if (MANIFEST_EXCLUDES.has(relPath)) continue
     const st = fs.statSync(path.join(absRoot, relPath))
     if (st.isDirectory()) listFiles(absRoot, relPath, out)
     else out.push(relPath)
@@ -62,19 +91,61 @@ function listFiles(absRoot, rel = "", out = []) {
   return out
 }
 
-/** 收集 manifest 下全部相对路径 → { relPath: LF 归一化内容 } */
+/** 读取一个 manifest 文件：二进制保留 Buffer，文本按 LF 归一化 */
+function readEntry(root, rel) {
+  const abs = path.join(root, rel)
+  if (isBinary(rel)) {
+    const data = fs.readFileSync(abs)
+    return { kind: "binary", data }
+  }
+  return {
+    kind: "text",
+    data: fs.readFileSync(abs, "utf8").replace(/\r\n/g, "\n"),
+  }
+}
+
+/** 二进制魔数校验：防止同步/拷贝把图片写成 UTF-8 替换字符 */
+function binaryLooksValid(rel, data) {
+  // UTF-8 文本管道会把 >=0x80 的字节替换成 EF BF BD，这是最常见的损坏特征
+  if (data.includes(Buffer.from([0xef, 0xbf, 0xbd]))) return false
+  const ext = path.extname(rel).toLowerCase()
+  if (ext === ".png") {
+    return data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  }
+  if (ext === ".webp") {
+    if (data.length < 16) return false
+    if (data.subarray(0, 4).toString("ascii") !== "RIFF") return false
+    if (data.subarray(8, 12).toString("ascii") !== "WEBP") return false
+    // RIFF 头里的文件长度必须与实际长度一致（损坏文件的长度字段会被写成乱码）
+    const declared = data.readUInt32LE(4) + 8
+    return Math.abs(declared - data.length) <= 1
+  }
+  if (ext === ".jpg" || ext === ".jpeg") {
+    return data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+  }
+  return true
+}
+
+/** 比较两个 manifest 条目：二进制逐字节，文本逐字符 */
+function sameEntry(a, b) {
+  if (a.kind !== b.kind) return false
+  if (a.kind === "binary") return Buffer.compare(a.data, b.data) === 0
+  return a.data === b.data
+}
+
+/** 收集 manifest 下全部相对路径 → entry */
 function collect(root) {
   const map = new Map()
   for (const d of MANIFEST_DIRS) {
     if (!fs.existsSync(path.join(root, d))) continue
     for (const rel of listFiles(root, d)) {
-      map.set(rel, fs.readFileSync(path.join(root, rel), "utf8").replace(/\r\n/g, "\n"))
+      map.set(rel, readEntry(root, rel))
     }
   }
   for (const f of MANIFEST_FILES) {
     const abs = path.join(root, f)
     if (fs.existsSync(abs)) {
-      map.set(f, fs.readFileSync(abs, "utf8").replace(/\r\n/g, "\n"))
+      map.set(f, readEntry(root, f))
     }
   }
   return map
@@ -95,10 +166,15 @@ const repo = collect(REPO_ROOT)
 
 const onlySrc = [...src.keys()].filter((k) => !repo.has(k)).sort()
 const onlyRepo = [...repo.keys()].filter((k) => !src.has(k)).sort()
-const changed = [...src.keys()].filter((k) => repo.has(k) && src.get(k) !== repo.get(k)).sort()
+const changed = [...src.keys()]
+  .filter((k) => repo.has(k) && !sameEntry(src.get(k), repo.get(k)))
+  .sort()
+const corrupt = [...repo.keys()]
+  .filter((k) => repo.get(k).kind === "binary" && !binaryLooksValid(k, repo.get(k).data))
+  .sort()
 
 if (CHECK_ONLY) {
-  if (onlySrc.length === 0 && onlyRepo.length === 0 && changed.length === 0) {
+  if (onlySrc.length === 0 && onlyRepo.length === 0 && changed.length === 0 && corrupt.length === 0) {
     console.log(`check:sync 通过：prototype 与 _repo/OPC-site 一致（${src.size} 个文件）`)
     process.exit(0)
   }
@@ -106,6 +182,7 @@ if (CHECK_ONLY) {
   for (const f of changed) console.error(`  内容不同：${f}`)
   for (const f of onlySrc) console.error(`  仅在 prototype：${f}`)
   for (const f of onlyRepo) console.error(`  仅在 _repo：${f}`)
+  for (const f of corrupt) console.error(`  二进制损坏：${f}`)
   console.error("修复：npm run sync:repo（同步到 _repo）")
   process.exit(1)
 }
@@ -119,13 +196,19 @@ if (dirty && !FORCE) {
   process.exit(1)
 }
 
-for (const [rel, content] of src) {
+for (const [rel, entry] of src) {
   const dest = path.join(REPO_ROOT, rel)
   fs.mkdirSync(path.dirname(dest), { recursive: true })
-  fs.writeFileSync(dest, content) // 已归一化为 LF
+  // Buffer 原样写入；文本已归一化为 LF
+  fs.writeFileSync(dest, entry.data)
 }
 for (const rel of onlyRepo) {
   fs.rmSync(path.join(REPO_ROOT, rel))
+}
+// 源图不入库：即使之前误同步进仓库，也在同步时清掉
+for (const rel of MANIFEST_EXCLUDES) {
+  const dest = path.join(REPO_ROOT, rel)
+  if (fs.existsSync(dest)) fs.rmSync(dest)
 }
 
 console.log(
