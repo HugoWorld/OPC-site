@@ -69,9 +69,17 @@ const args = new Set(process.argv.slice(2))
 const CHECK_ONLY = args.has("--check")
 const FORCE = args.has("--force")
 
-/** 在 _repo 内跑 git；git 不可用时返回 null（跳过安全检查） */
+/** 在 _repo 内跑 git；优先显式 GIT_EXE，其次本机便携 git，最后 PATH 里的 git */
+function gitBinary() {
+  if (process.env.GIT_EXE && fs.existsSync(process.env.GIT_EXE)) return process.env.GIT_EXE
+  const portable = path.resolve(SRC_ROOT, "../_tools/mingit/cmd/git.exe")
+  if (fs.existsSync(portable)) return portable
+  return "git"
+}
+
+/** git 不可用时返回 null（跳过安全检查） */
 function gitPorcelain() {
-  const r = spawnSync("git", ["-C", REPO_ROOT, "status", "--porcelain"], {
+  const r = spawnSync(gitBinary(), ["-C", REPO_ROOT, "status", "--porcelain"], {
     encoding: "utf8",
   })
   if (r.error || r.status !== 0) return null
