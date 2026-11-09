@@ -6,7 +6,7 @@
  * 2. 命中禁用词即失败（承诺结果类表述是红线）；
  * 3. 输出命中处的上下文，便于直接定位到源文案。
  *
- * 用法：node scripts/check-copy.mjs   （需先 npm run build）
+ * 用法：node scripts/check-copy.mjs   （需先 npm run build:all）
  *
  * 判定口径：只拦「承诺结果 / 绝对化 / 贬低同行」的表述。
  * 形如「不保证结果」「你能保证吗」属于合规免责与提问，不拦。
@@ -14,7 +14,10 @@
 import fs from "node:fs"
 import path from "node:path"
 
-const DIST = path.resolve("dist")
+/** 访客产物与管理台产物都扫：工作台文案同样受红线约束 */
+const DISTS = [path.resolve("dist"), path.resolve("dist-admin")].filter((d) =>
+  fs.existsSync(d),
+)
 
 /** 禁用词：用短语而非单字，避免把「不保证」「第一个月」这类正常表述误判为红线 */
 const BANNED = [
@@ -63,27 +66,36 @@ function extractChinese(text) {
   return text.match(re) || []
 }
 
-const files = fs.existsSync(DIST) ? listFiles(DIST) : []
-if (files.length === 0) {
-  console.error("dist 不存在或无产物，请先执行 npm run build")
+if (DISTS.length === 0) {
+  console.error("dist / dist-admin 均不存在，请先执行 npm run build:all")
   process.exit(2)
 }
 
+let totalFiles = 0
 const hits = []
-for (const file of files) {
-  let raw = fs.readFileSync(file, "utf8")
-  for (const allow of ALLOW) raw = raw.replace(allow, "")
-  for (const frag of extractChinese(raw)) {
-    for (const rule of BANNED) {
-      if (rule.re.test(frag)) {
-        hits.push({ file: path.relative(DIST, file), rule: rule.label, ctx: frag.slice(0, 48) })
+for (const dist of DISTS) {
+  const files = listFiles(dist)
+  totalFiles += files.length
+  for (const file of files) {
+    let raw = fs.readFileSync(file, "utf8")
+    for (const allow of ALLOW) raw = raw.replace(allow, "")
+    for (const frag of extractChinese(raw)) {
+      for (const rule of BANNED) {
+        if (rule.re.test(frag)) {
+          hits.push({
+            file: `${path.basename(dist)}/${path.relative(dist, file)}`,
+            rule: rule.label,
+            ctx: frag.slice(0, 48),
+          })
+        }
       }
     }
   }
 }
 
 if (hits.length === 0) {
-  console.log(`文案红线扫描通过：${files.length} 个产物文件，无禁用词命中`)
+  const scanned = DISTS.map((d) => `${path.basename(d)} ${listFiles(d).length} 个`).join("、")
+  console.log(`文案红线扫描通过：${scanned} 产物文件，无禁用词命中（合计 ${totalFiles}）`)
   process.exit(0)
 }
 

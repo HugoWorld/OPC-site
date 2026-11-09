@@ -11,14 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # 22.x（≥ 22.6）：test:* 依赖 node --experimental-strip-types
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install
-        run: npm install
+        run: npm ci
       - name: Typecheck
         run: npm run typecheck
-      - name: Build
-        run: npm run build
+      - name: Build（双产物）
+        run: npm run build:all
+      - name: Unit tests
+        run: |
+          npm run test:schema
+          npm run test:gateway
+          npm run test:publish-guard
+          npm run test:migration
+      # 文案红线与资源本地化检查（FR-SAFE / O-3），访客与管理台产物都扫
+      - name: Copy & asset gates
+        run: |
+          npm run check:copy
+          npm run check:assets
+      # 冒烟（smoke）需要本机 Chrome，留给本地 npm run verify
       - name: Report bundle size
-        run: ls -lh dist/assets
+        run: ls -lh dist/assets dist-admin/assets

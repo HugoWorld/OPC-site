@@ -1,10 +1,11 @@
 node_modules
 dist
+dist-admin
 dist-ssr
 *.local
+.env
+.env.*
 .DS_Store
 .vite
 *.tsbuildinfo
 *.log
-.env
-.env.local

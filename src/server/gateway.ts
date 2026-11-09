@@ -112,11 +112,17 @@ function error(
   return json(status, { error: { code, message } }, extra)
 }
 
-/** 取客户端 IP：优先反向代理头，缺失时退化为 unknown（单实例仍可限流）。 */
+/**
+ * 取客户端 IP。网关只监听 127.0.0.1，由本机 Nginx 覆盖写入代理头，
+ * 因此优先取 X-Real-IP；没有该头时再退到 X-Forwarded-For 首值。
+ * 直接暴露公网时必须由前置代理覆盖这两个头，否则限流可被伪造 IP 绕过。
+ */
 function clientIp(headers: Record<string, string>): string {
+  const real = headers["x-real-ip"]
+  if (real) return real.trim()
   const forwarded = headers["x-forwarded-for"]
   if (forwarded) return forwarded.split(",")[0].trim()
-  return headers["x-real-ip"] ?? headers["cf-connecting-ip"] ?? "unknown"
+  return headers["cf-connecting-ip"] ?? "unknown"
 }
 
 function tooMany(retryAfterMs: number): GatewayResponse {
@@ -124,6 +130,18 @@ function tooMany(retryAfterMs: number): GatewayResponse {
   return error(429, "RATE_LIMITED", "请求过于频繁，请稍后再试", {
     "retry-after": seconds,
   })
+}
+
+/** 浏览器回跳（授权回调用）：空响应体 + Location，会话走 Set-Cookie 头。 */
+function redirect(location: string, extra?: Record<string, string>): GatewayResponse {
+  return { status: 302, headers: { location, ...(extra ?? {}) }, body: "" }
+}
+
+function sessionCookie(sid: string): string {
+  return (
+    `${SESSION_COOKIE}=${encodeURIComponent(sid)}; ` +
+    "HttpOnly; Secure; SameSite=Lax; Path=/"
+  )
 }
 
 function pathOf(url: string): string {
@@ -181,6 +199,32 @@ async function authenticate(
   return { ok: true, session, sid }
 }
 
+/**
+ * 换票成功后的公共步骤：白名单校验 → 建会话。
+ * POST /api/auth/exchange 与 GET /api/auth/callback 共用，保证两条登录路径行为一致。
+ */
+async function establishSession(
+  deps: GatewayDeps,
+  user: FeishuUser,
+): Promise<
+  { ok: true; session: SessionPayload; sid: string } | { ok: false; response: GatewayResponse }
+> {
+  if (!deps.adminOpenIds.includes(user.openId)) {
+    return { ok: false, response: error(403, "NOT_ALLOWED", "该账号不在管理员白名单") }
+  }
+  const now = Date.now()
+  const expiresAt = now + deps.sessionTtlMs
+  const session: SessionPayload = {
+    openId: user.openId,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    createdAt: now,
+    expiresAt,
+  }
+  const sid = await deps.sessions.create(session)
+  return { ok: true, session, sid }
+}
+
 /* ---------------- 网关工厂 ---------------- */
 
 export function createGateway(deps: GatewayDeps) {
@@ -216,38 +260,45 @@ export function createGateway(deps: GatewayDeps) {
       }
       try {
         const { user } = await deps.feishu.exchangeCode(body.code)
-        if (!deps.adminOpenIds.includes(user.openId)) {
-          return error(403, "NOT_ALLOWED", "该账号不在管理员白名单")
-        }
-        const now = Date.now()
-        const expiresAt = now + deps.sessionTtlMs
-        const sid = await deps.sessions.create({
-          openId: user.openId,
-          name: user.name,
-          avatarUrl: user.avatarUrl,
-          createdAt: now,
-          expiresAt,
-        })
+        const est = await establishSession(deps, user)
+        if (!est.ok) return est.response
         return json(
           200,
           {
-            name: user.name,
-            avatarUrl: user.avatarUrl,
-            openIdSuffix: maskOpenId(user.openId),
-            expiresAt,
+            name: est.session.name,
+            avatarUrl: est.session.avatarUrl,
+            openIdSuffix: maskOpenId(est.session.openId),
+            expiresAt: est.session.expiresAt,
           },
-          {
-            "set-cookie":
-              `${SESSION_COOKIE}=${encodeURIComponent(sid)}; ` +
-              "HttpOnly; Secure; SameSite=Lax; Path=/",
-          },
+          { "set-cookie": sessionCookie(est.sid) },
         )
       } catch (e) {
-        return error(
-          502,
-          "UPSTREAM_FAILED",
-          "飞书授权失败：" + (e instanceof Error ? e.message : "未知错误"),
-        )
+        // 上游错误细节只进服务端日志，响应体保持抽象文案（不回传飞书内部信息）。
+        console.error("[gateway] feishu exchange failed:", e instanceof Error ? e.message : e)
+        return error(502, "UPSTREAM_FAILED", "飞书授权失败，请稍后重试")
+      }
+    }
+
+    /* GET /api/auth/callback：飞书授权完成后的浏览器回跳（「安全设置」里登记的授权回调地址）。
+     * 与 POST /api/auth/exchange 干同一件事，区别是浏览器导航语义：
+     * 用 302 把浏览器送回工作台，会话经 Set-Cookie 下发；任何失败回登录页并带错误码。 */
+    if (path === "/api/auth/callback" && method === "GET") {
+      const back = (err?: string, extra?: Record<string, string>) =>
+        redirect(err ? `/#/login/?error=${encodeURIComponent(err)}` : "/#/admin/", extra)
+      const qIndex = req.url.indexOf("?")
+      const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
+      const code = qs?.get("code")
+      if (!code) return back("missing_code")
+      const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
+      if (!gate.allowed) return back("rate_limited")
+      try {
+        const { user } = await deps.feishu.exchangeCode(code)
+        const est = await establishSession(deps, user)
+        if (!est.ok) return back("not_allowed")
+        return back(undefined, { "set-cookie": sessionCookie(est.sid) })
+      } catch (e) {
+        console.error("[gateway] feishu callback failed:", e instanceof Error ? e.message : e)
+        return back("upstream")
       }
     }
 

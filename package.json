@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:site": "tsc -b && vite build",
+    "build:site": "npm run build",
     "build:admin": "tsc -b && vite build --mode admin && node scripts/admin-index.mjs",
     "build:all": "npm run build:site && npm run build:admin",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "check:copy": "node scripts/check-copy.mjs",
     "check:assets": "node scripts/check-assets.mjs",
+    "check:sync": "node scripts/sync-to-repo.mjs --check",
+    "sync:repo": "node scripts/sync-to-repo.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test:schema": "node --experimental-strip-types scripts/test-schema.ts",
     "test:gateway": "node --experimental-strip-types scripts/test-gateway.ts",
@@ -20,7 +22,7 @@
     "test:migration": "node --experimental-strip-types scripts/test-migration.ts",
     "test:publish-flow": "node scripts/publish-flow.mjs",
     "test:responsive": "node scripts/responsive-check.mjs",
-    "verify": "npm run build && npm run test:schema && npm run test:gateway && npm run test:publish-guard && npm run test:migration && npm run check:copy && npm run check:assets && npm run smoke",
+    "verify": "npm run build:all && npm run test:schema && npm run test:gateway && npm run test:publish-guard && npm run test:migration && npm run check:sync && npm run check:copy && npm run check:assets && npm run smoke",
     "shadcn": "npx --yes shadcn@latest"
   },
   "dependencies": {

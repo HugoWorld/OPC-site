@@ -78,14 +78,15 @@ React 19 · Vite 6 · TypeScript 5.7 · Tailwind CSS v4 · shadcn/ui
 
 ## 快速开始
 
-要求 **Node.js ≥ 20**。
+要求 **Node.js ≥ 22.6**（构建 ≥ 20 即可，但 `test:*` 依赖 `node --experimental-strip-types`，需要 22.6+）。
 
 ```bash
 npm install
 npm run dev          # 默认 http://localhost:5173
-npm run build        # 类型检查 + 生产构建，产物在 dist/
+npm run build:all    # 类型检查 + 双产物：dist/（访客）+ dist-admin/（管理台）
 npm run preview      # 预览构建产物
 npm run typecheck    # 只做类型检查
+npm run verify       # 双产物构建 + 4 组测试 + 文案/资源红线检查 + 冒烟
 ```
 
 Windows 提示：npm 的原生依赖按平台下载，请在目标机器上执行 `npm install`；从 Linux 容器拷贝的 `node_modules` 会因缺少 `win32-x64` 原生包而报 `Cannot find module @rollup/rollup-win32-x64-msvc`。
@@ -149,27 +150,35 @@ export const BITABLE_ENV = {
 - `pullAll()` / `pushAll()` 在未接入时统一返回 `ok: false`，调用方自动回落本机存储，不会静默丢数据
 - 真实接入需要四件事：域名 + HTTPS（回调地址在飞书应用后台登记）、一个持有 `app_secret` 的薄网关、多维表格授权给应用、各表 `table_id`
 
-推荐的网关四个端点：
+网关已实现的路由（`src/server/gateway.ts`，平台无关处理函数，含单元测试）：
 
 ```
-POST /api/auth/callback   code → user_access_token → user_info → open_id 白名单 → 会话
-GET  /api/session         校验会话，返回 name / avatar / open_id 尾号
-GET  /api/content/read    读 12 张表 → 归一化为站点数据结构
-POST /api/publish         upsert 全部表 → 生成发布快照 → 失效缓存
+GET  /api/health           健康检查与请求计数
+GET  /api/auth/callback    飞书授权回跳：换票 → 白名单 → 建会话 → 302 回工作台（Set-Cookie）
+POST /api/auth/exchange    前端直连换会话（同一套换票逻辑，返回 JSON）
+GET  /api/auth/me          校验会话，返回 name / avatar / open_id 尾号
+POST /api/auth/logout      清会话、清 Cookie
+POST /api/publish          发布草稿（会话鉴权 + 按管理员限流 + 单实例串行锁）
+GET  /api/snapshot/current 读取发布快照
 ```
+
+> 网关的 Node HTTP 入口（`src/server/main.ts`，监听 `127.0.0.1:8787`）**尚未提交**，属部署前必补项；
+> 处理函数与测试已就绪。
 
 ## 构建与部署
 
 ```bash
-npm run build      # 产出 dist/：index.html + assets/*.js + assets/*.css
+npm run build:site   # 访客站 → dist/
+npm run build:admin  # 管理台 → dist-admin/（含 index.html）
 ```
 
 部署要点：
 
-- 纯静态托管即可（Nginx / 对象存储 / CDN），**不需要 Node 运行时**（工作台与前台都在浏览器里跑）
-- 使用 HashRouter，所以**不需要**配置服务端 SPA 回退；`#/` 之后的路径由浏览器解析
-- `index.html` 建议 `no-cache`，`assets/*`（带内容 hash）可长缓存
-- 若启用飞书登录，前端需要能访问你的网关域名，注意 CORS 与 Cookie 的 `SameSite` / `Secure` 设置
+- 正式形态是**单机自托管**：一台云主机上 Nginx 双 vhost，`www` 服务 `dist/`、`admin` 服务 `dist-admin/` 并反代 `/api`；**不接 CDN、不接对象存储**
+- 网关是同机 Node 进程（systemd，`127.0.0.1:8787`），只服务管理台的 `/api`
+- HashRouter 由前端处理路由，但服务端仍需 SPA 回退（所有路径回落 `index.html`）
+- `index.html` `no-cache`，`assets/*`（带内容 hash）长缓存；发布快照写本机 `/srv/hugow/data`
+- 若启用飞书登录，`admin` 与 `/api` 必须同域，Cookie 才能生效
 
 ## 已知限制
 
@@ -178,9 +187,9 @@ npm run build      # 产出 dist/：index.html + assets/*.js + assets/*.css
 - 数据默认存本机 `localStorage`，换浏览器或清缓存即丢失；多人协作需要接入多维表格或数据库
 - 登录为模拟实现，未接真实飞书 OAuth；`MOCK_USER` 的 `open_id` 是占位值
 - 仓库中没有真实客户案例与证言，样例为演示文案
-- 图片为外链 URL，未做本地图床；正式上线建议自建图床或对象存储
-- 构建产物单 chunk 约 618 kB（gzip 187 kB），未做路由级拆包
-- 没有自动化 E2E 测试，验证依赖人工穿越
+- 图片已本地化为站内 webp（头像三档 + 背景），不再依赖外链图床
+- 访客产物与工作台产物已拆分，入口块 gzip 约 30 kB，AdminPage 只在 `dist-admin`
+- 自动化验证覆盖到冒烟级：`scripts/smoke.mjs`（Playwright，路由可达、双入口隔离、登录拦截、图片加载），更完整的 E2E（真实授权回调链路）待网关部署后补
 
 ## 内容与合规
 
@@ -188,11 +197,11 @@ npm run build      # 产出 dist/：index.html + assets/*.js + assets/*.css
 
 ## Roadmap
 
-- [ ] 真实飞书 OAuth + 薄网关（四端点）
+- [x] 真实飞书 OAuth + 薄网关（七条路由，处理函数与 27 项单测已就绪；`main.ts` 入口与单机部署待执行）
 - [ ] 多维表格双向同步与冲突处理（当前为单向覆盖）
-- [ ] 路由级代码拆包
-- [ ] Playwright E2E：登录、发布、未登录拦截
-- [ ] 图片上传改为对象存储直传
+- [x] 路由级代码拆包（访客/管理台双入口）
+- [x] Playwright/k6 冒烟与压测脚本（登录、发布、未登录拦截、并发基线）
+- [ ] 图片上传落本机 `/srv/hugow/media` 并纳入每日备份（不使用对象存储直传）
 
 ## License
 

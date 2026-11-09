@@ -142,6 +142,43 @@ t("exchange 上游失败返回 502", async () => {
     req("POST", "/api/auth/exchange", JSON.stringify({ code: "c1" })),
   )
   assert.equal(res.status, 502)
+  // 上游细节不回传客户端
+  assert.ok(!res.body.includes("boom"))
+})
+
+t("callback 成功：302 回工作台并下发可用 Cookie", async () => {
+  const deps = makeDeps()
+  const res = await createGateway(deps)(req("GET", "/api/auth/callback?code=c1"))
+  assert.equal(res.status, 302)
+  assert.equal(res.headers.location, "/#/admin/")
+  const m = /sid=([^;]+)/.exec(res.headers["set-cookie"] ?? "")
+  assert.ok(m)
+  // 回调下发的会话必须能直接通过 me 校验
+  const me = await createGateway(deps)(
+    req("GET", "/api/auth/me", "", { cookie: "sid=" + m[1] }),
+  )
+  assert.equal(me.status, 200)
+})
+
+t("callback 缺 code 回登录页", async () => {
+  const res = await createGateway(makeDeps())(req("GET", "/api/auth/callback"))
+  assert.equal(res.status, 302)
+  assert.equal(res.headers.location, "/#/login/?error=missing_code")
+})
+
+t("callback 白名单外回登录页且不下发 Cookie", async () => {
+  const deps = makeDeps({
+    feishu: {
+      exchangeCode: async () => ({
+        accessToken: "t",
+        user: { name: "x", avatarUrl: "", openId: "ou_other_0000000001" },
+      }),
+    },
+  })
+  const res = await createGateway(deps)(req("GET", "/api/auth/callback?code=c1"))
+  assert.equal(res.status, 302)
+  assert.equal(res.headers.location, "/#/login/?error=not_allowed")
+  assert.equal(res.headers["set-cookie"], undefined)
 })
 
 t("me 无 Cookie 返回 401", async () => {
@@ -160,12 +197,15 @@ t("me 登录后返回会话摘要", async () => {
 })
 
 t("me 会话过期返回 401", async () => {
+  // 同一 deps：cookie 必须来自被测实例自己的会话存储，
+  // 否则 401 会来自「会话不存在」分支而非「已过期」分支（假阳性）。
   const deps = makeDeps({ sessionTtlMs: -1 })
-  const cookie = await loginCookie(makeDeps())
+  const cookie = await loginCookie(deps)
   const res = await createGateway(deps)(
     req("GET", "/api/auth/me", "", { cookie }),
   )
   assert.equal(res.status, 401)
+  assert.match(JSON.parse(res.body).error.message, /已过期/)
 })
 
 t("publish 无 Cookie 返回 401", async () => {
