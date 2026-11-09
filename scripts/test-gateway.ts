@@ -12,6 +12,7 @@ import {
   type SessionPayload,
   type SessionStore,
 } from "../src/server/gateway.ts"
+import { createSignedSessionStore } from "../src/server/session.ts"
 import type { PublishResult } from "../src/site/admin/data/adapter"
 
 const ADMIN_OPEN_ID = "ou_admin_1234567890"
@@ -236,6 +237,103 @@ t("snapshot 不可用时返回 404", async () => {
   })
   const res = await createGateway(deps)(req("GET", "/api/snapshot/current"))
   assert.equal(res.status, 404)
+})
+
+t("health 返回健康状态与状态码计数", async () => {
+  const handle = createGateway(makeDeps())
+  await handle(req("GET", "/api/nope"))
+  const res = await handle(req("GET", "/api/health"))
+  assert.equal(res.status, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.ok, true)
+  assert.equal(body.requests.total, 1)
+  assert.equal(body.requests.byStatus["404"], 1)
+})
+
+/* ---------------- 无状态签名会话 ---------------- */const SIGNED_SECRET = "test-signing-secret-32-bytes-long"
+
+function payload(over: Partial<SessionPayload> = {}): SessionPayload {
+  return {
+    openId: ADMIN_OPEN_ID,
+    name: "HugoW",
+    avatarUrl: "",
+    createdAt: 1000,
+    expiresAt: 1000 + TTL,
+    ...over,
+  }
+}
+
+t("签名会话可原样取回", async () => {
+  const store = createSignedSessionStore({ secret: SIGNED_SECRET })
+  const sid = await store.create(payload())
+  const got = await store.get(sid)
+  assert.equal(got?.openId, ADMIN_OPEN_ID)
+  assert.equal(got?.name, "HugoW")
+})
+
+t("签名被篡改时取不回会话", async () => {
+  const store = createSignedSessionStore({ secret: SIGNED_SECRET })
+  const sid = await store.create(payload())
+  const tampered = sid.slice(0, -2) + (sid.endsWith("A") ? "BB" : "AA")
+  assert.equal(await store.get(tampered), null)
+})
+
+t("换一个密钥签发的会话验不过", async () => {
+  const issuer = createSignedSessionStore({ secret: SIGNED_SECRET })
+  const verifier = createSignedSessionStore({ secret: SIGNED_SECRET + "-other" })
+  const sid = await issuer.create(payload())
+  assert.equal(await verifier.get(sid), null)
+})
+
+t("畸形 Cookie 返回 null", async () => {
+  const store = createSignedSessionStore({ secret: SIGNED_SECRET })
+  assert.equal(await store.get("not-a-token"), null)
+  assert.equal(await store.get("a.b.c"), null)
+})
+
+t("签名会话可直接通过网关鉴权", async () => {
+  const deps = makeDeps({
+    sessions: createSignedSessionStore({ secret: SIGNED_SECRET }),
+  })
+  const cookie = await loginCookie(deps)
+  const res = await createGateway(deps)(req("GET", "/api/auth/me", "", { cookie }))
+  assert.equal(res.status, 200)
+  assert.equal(JSON.parse(res.body).name, "HugoW")
+})
+
+/* ---------------- 限流 ---------------- */
+
+t("exchange 超过 10 次/分返回 429 且带 Retry-After", async () => {
+  const deps = makeDeps()
+  const handle = createGateway(deps)
+  for (let i = 0; i < 10; i += 1) {
+    const ok = await handle(
+      req("POST", "/api/auth/exchange", JSON.stringify({ code: "c" + i })),
+    )
+    assert.equal(ok.status, 200)
+  }
+  const blocked = await handle(
+    req("POST", "/api/auth/exchange", JSON.stringify({ code: "c11" })),
+  )
+  assert.equal(blocked.status, 429)
+  assert.equal(JSON.parse(blocked.body).error.code, "RATE_LIMITED")
+  assert.ok(Number(blocked.headers["retry-after"]) >= 1)
+})
+
+t("publish 超过 3 次/分返回 429", async () => {
+  const deps = makeDeps()
+  const cookie = await loginCookie(deps)
+  const handle = createGateway(deps)
+  for (let i = 0; i < 3; i += 1) {
+    const ok = await handle(
+      req("POST", "/api/publish", JSON.stringify({ draft: { order: i } }), { cookie }),
+    )
+    assert.equal(ok.status, 200)
+  }
+  const blocked = await handle(
+    req("POST", "/api/publish", JSON.stringify({ draft: { order: 4 } }), { cookie }),
+  )
+  assert.equal(blocked.status, 429)
 })
 
 for (const [name, fn] of cases) {

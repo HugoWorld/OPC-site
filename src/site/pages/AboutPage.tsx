@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useSiteData } from "@/site/admin/store"
 import { Container, Section } from "@/site/components/Layout"
+import { HERO_AVATAR_SRCSET } from "@/site/data/home"
 
 /** 关于我：履历时间线、三条工作原则、能力边界。（页头标题来自「二级页页面设置」） */
 export function AboutPage() {
@@ -30,6 +31,8 @@ export function AboutPage() {
             {avatar ? (
               <img
                 src={avatar}
+                srcSet={avatar === hero.avatarUrl ? HERO_AVATAR_SRCSET : undefined}
+                sizes="150px"
                 alt={theme.avatarLetter || "HugoW 形象"}
                 className="glass-card size-[150px] rounded-2xl object-cover"
               />

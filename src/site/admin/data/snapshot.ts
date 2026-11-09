@@ -36,7 +36,10 @@ export async function readSnapshot(
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), timeoutMs)
     try {
-      const res = await fetchImpl(url, { signal: ctrl.signal, cache: "no-store" })
+      // 不在前端强制 no-store：缓存策略交给 CDN/对象存储的响应头。
+      // current.json 用 max-age=30 + stale-while-revalidate，版本文件 immutable；
+      // 若在这里 no-store，每次首屏都会回源，突发流量直接打到源站。
+      const res = await fetchImpl(url, { signal: ctrl.signal })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return await res.json()
     } finally {

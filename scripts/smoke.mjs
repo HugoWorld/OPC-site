@@ -14,6 +14,7 @@ import path from "node:path"
 import { chromium } from "playwright-core"
 
 const DIST = path.resolve("dist")
+const DIST_ADMIN = path.resolve("dist-admin")
 const PORT = Number(process.env.SMOKE_PORT || 4311)
 const CHANNEL = process.env.SMOKE_BROWSER || "chrome"
 
@@ -33,18 +34,25 @@ if (!fs.existsSync(DIST)) {
   console.error("dist 不存在，请先执行 npm run build")
   process.exit(2)
 }
+if (!fs.existsSync(DIST_ADMIN)) {
+  console.error("dist-admin 不存在，请先执行 npm run build:admin")
+  process.exit(2)
+}
 
-/** 极简静态服务器：命中文件就返回，否则回落 index.html（HashRouter 不需要，但保证健壮） */
+/** 极简静态服务器：/admin/ 前缀服务管理台产物，其余回落访客站 index.html */
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || "/").split("?")[0])
-  const target = path.join(DIST, urlPath === "/" ? "index.html" : urlPath)
-  if (target.startsWith(DIST) && fs.existsSync(target) && fs.statSync(target).isFile()) {
+  const isAdmin = urlPath === "/admin" || urlPath.startsWith("/admin/")
+  const root = isAdmin ? DIST_ADMIN : DIST
+  const rel = isAdmin ? urlPath.replace(/^\/admin\/?/, "") || "index.html" : urlPath === "/" ? "index.html" : urlPath
+  const target = path.join(root, rel)
+  if (target.startsWith(root) && fs.existsSync(target) && fs.statSync(target).isFile()) {
     res.writeHead(200, { "content-type": MIME[path.extname(target)] || "application/octet-stream" })
     fs.createReadStream(target).pipe(res)
     return
   }
   res.writeHead(200, { "content-type": MIME[".html"] })
-  fs.createReadStream(path.join(DIST, "index.html")).pipe(res)
+  fs.createReadStream(path.join(root, "index.html")).pipe(res)
 })
 
 /** 需要访问的站点路由及其应有的一级标题 */
@@ -111,9 +119,18 @@ try {
   const broken = imgs.filter((i) => i.w === 0)
   record("首屏图片全部加载成功", broken.length === 0, broken.map((b) => b.src).join(", ").slice(0, 120))
 
-  /* ---------- 3. 未登录访问工作台只渲染引导卡（FR-AUTH-04） ---------- */
+  /* ---------- 3. 双入口隔离：访客站不再有 /admin ---------- */
   await page.evaluate(() => localStorage.removeItem("hugow-admin-session-v1"))
   await page.goto(base + "#/admin/", { waitUntil: "domcontentloaded" })
+  await page.waitForFunction(
+    () => (document.body.innerText || "").includes("这一页不存在"),
+    null,
+    { timeout: 10000 },
+  )
+  record("访客站 /#/admin 返回 404（路由与产物均已拆走）", true)
+
+  /* ---------- 4. 未登录访问工作台只渲染引导卡（FR-AUTH-04） ---------- */
+  await page.goto(base + "admin/#/admin/", { waitUntil: "domcontentloaded" })
   await page.waitForFunction(
     () => (document.body.innerText || "").includes("运营工作台需要登录"),
     null,
@@ -130,7 +147,7 @@ try {
     JSON.stringify(blocked),
   )
 
-  /* ---------- 4. 登录后工作台可进入（12 个标目 + 预览 iframe） ---------- */
+  /* ---------- 5. 登录后工作台可进入（12 个标目 + 预览 iframe） ---------- */
   await page.evaluate((s) => {
     localStorage.setItem("hugow-admin-session-v1", JSON.stringify(s))
   }, SESSION)

@@ -6,6 +6,12 @@
 
 import type { PublishResult } from "../site/admin/data/adapter"
 import type { SnapshotEnvelope } from "../site/admin/data/snapshot"
+import {
+  createMemoryRateLimiter,
+  type RateLimiter,
+  type RateLimitRule,
+} from "./rate-limit.ts"
+import { createKeyedMutex } from "./publish-guard.ts"
 
 /* ---------------- 依赖接口 ---------------- */
 
@@ -48,6 +54,21 @@ export interface GatewayDeps {
   snapshots: SnapshotService
   adminOpenIds: readonly string[]
   sessionTtlMs: number
+  /** 限流实现；不传则用进程内固定窗口计数（单实例场景） */
+  rateLimiter?: RateLimiter
+  /** 按路由覆盖默认限流规则 */
+  rateRules?: Partial<RateLimitRules>
+}
+
+export interface RateLimitRules {
+  exchange: RateLimitRule
+  publish: RateLimitRule
+}
+
+/** 默认规则：登录 10 次/分/IP；发布 3 次/分/管理员。 */
+export const DEFAULT_RATE_RULES: RateLimitRules = {
+  exchange: { limit: 10, windowMs: 60_000 },
+  publish: { limit: 3, windowMs: 60_000 },
 }
 
 /* ---------------- 请求/响应 ---------------- */
@@ -82,8 +103,27 @@ function json(
   }
 }
 
-function error(status: number, code: string, message: string): GatewayResponse {
-  return json(status, { error: { code, message } })
+function error(
+  status: number,
+  code: string,
+  message: string,
+  extra?: Record<string, string>,
+): GatewayResponse {
+  return json(status, { error: { code, message } }, extra)
+}
+
+/** 取客户端 IP：优先反向代理头，缺失时退化为 unknown（单实例仍可限流）。 */
+function clientIp(headers: Record<string, string>): string {
+  const forwarded = headers["x-forwarded-for"]
+  if (forwarded) return forwarded.split(",")[0].trim()
+  return headers["x-real-ip"] ?? headers["cf-connecting-ip"] ?? "unknown"
+}
+
+function tooMany(retryAfterMs: number): GatewayResponse {
+  const seconds = String(Math.max(1, Math.ceil(retryAfterMs / 1000)))
+  return error(429, "RATE_LIMITED", "请求过于频繁，请稍后再试", {
+    "retry-after": seconds,
+  })
 }
 
 function pathOf(url: string): string {
@@ -144,12 +184,31 @@ async function authenticate(
 /* ---------------- 网关工厂 ---------------- */
 
 export function createGateway(deps: GatewayDeps) {
-  return async function handle(req: GatewayRequest): Promise<GatewayResponse> {
+  const limiter = deps.rateLimiter ?? createMemoryRateLimiter()
+  const rules: RateLimitRules = { ...DEFAULT_RATE_RULES, ...(deps.rateRules ?? {}) }
+  // 单实例内串行发布：避免两个请求交叉写表 / 切快照指针。
+  const publishLock = createKeyedMutex()
+  const startedAt = Date.now()
+  const stats = { total: 0, byStatus: {} as Record<string, number> }
+
+  async function handle(req: GatewayRequest): Promise<GatewayResponse> {
     const path = pathOf(req.url)
     const method = req.method.toUpperCase()
 
+    /* GET /api/health：给压测与看板用的轻量健康/计数端点（不含敏感信息） */
+    if (path === "/api/health" && method === "GET") {
+      return json(200, {
+        ok: true,
+        uptimeMs: Date.now() - startedAt,
+        requests: { total: stats.total, byStatus: stats.byStatus },
+      })
+    }
+
     /* POST /api/auth/exchange */
     if (path === "/api/auth/exchange" && method === "POST") {
+      // 未登录也能打这个端点，所以按 IP 限制，先于解析请求体。
+      const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
+      if (!gate.allowed) return tooMany(gate.retryAfterMs)
       const body = parseBody(req.bodyText)
       if (!body) return error(400, "BAD_REQUEST", "请求体不是合法 JSON")
       if (typeof body.code !== "string" || !body.code) {
@@ -224,10 +283,15 @@ export function createGateway(deps: GatewayDeps) {
       if (!body) return error(400, "BAD_REQUEST", "请求体不是合法 JSON")
       const auth = await authenticate(deps, req)
       if (!auth.ok) return auth.response
+      // 发布按管理员账号限制，避免同一账号的两台设备互相刷。
+      const gate = limiter.hit(`publish:${auth.session.openId}`, rules.publish)
+      if (!gate.allowed) return tooMany(gate.retryAfterMs)
       if (!body.draft || typeof body.draft !== "object") {
         return error(400, "BAD_REQUEST", "缺少 draft")
       }
-      const result = await deps.publisher.publish(body.draft, auth.session)
+      const result = await publishLock("publish", () =>
+        deps.publisher.publish(body.draft, auth.session),
+      )
       return json(result.status === "ok" ? 200 : 207, result)
     }
 
@@ -241,5 +305,13 @@ export function createGateway(deps: GatewayDeps) {
     }
 
     return error(404, "NOT_FOUND", "未知端点")
+  }
+
+  return async function gateway(req: GatewayRequest): Promise<GatewayResponse> {
+    const response = await handle(req)
+    stats.total += 1
+    const key = String(response.status)
+    stats.byStatus[key] = (stats.byStatus[key] ?? 0) + 1
+    return response
   }
 }

@@ -4,7 +4,17 @@
 /* ------------------------------------------------------------------ */
 
 import heroAvatar from "../assets/hero-avatar.webp"
+import avatar224 from "../assets/hero-avatar-224.webp"
+import avatar320 from "../assets/hero-avatar-320.webp"
+import avatar448 from "../assets/hero-avatar-448.webp"
 import heroBg from "../assets/hero-bg.webp"
+
+/** 默认头像的三档尺寸（224 / 320 / 448），供 srcset 按 DPR 选择。 */
+export const HERO_AVATAR_SRCSET = [
+  `${avatar224} 224w`,
+  `${avatar320} 320w`,
+  `${avatar448} 448w`,
+].join(", ")
 
 export const HERO = {
   eyebrow: "法律与咨询服务一线出身 · 一人公司",

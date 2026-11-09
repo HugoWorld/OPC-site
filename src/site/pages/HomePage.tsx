@@ -18,7 +18,7 @@ import { Section, SectionHead } from "@/site/components/Layout"
 import { SharesSection } from "@/site/components/SharesSection"
 import { TestimonialsSection } from "@/site/components/TestimonialsSection"
 import { WritingTopics } from "@/site/components/WritingTopics"
-import { HOME_SECTIONS } from "@/site/data/home"
+import { HERO_AVATAR_SRCSET, HOME_SECTIONS } from "@/site/data/home"
 
 /**
  * 首页：按游客兴趣动线重排——
@@ -129,6 +129,8 @@ export function HomePage() {
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
+                    srcSet={avatarUrl === hero.avatarUrl ? HERO_AVATAR_SRCSET : undefined}
+                    sizes="(min-width: 768px) 224px, 160px"
                     alt="HugoW 拟卡通形象"
                     className="mx-auto size-40 rounded-full border-[3px] border-card/85 object-cover shadow-glow md:size-56"
                   />

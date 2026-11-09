@@ -7,7 +7,6 @@ import { Footer } from "@/site/components/Footer"
 import { Header } from "@/site/components/Header"
 import { DynamicPage, DynamicPageView } from "@/site/pages/DynamicPage"
 import { HomePage } from "@/site/pages/HomePage"
-import { LoginPage } from "@/site/pages/LoginPage"
 import { NotFoundPage } from "@/site/pages/NotFoundPage"
 
 /* 前台二级页按需加载：首屏只下载首页所需代码（PRD O-6 路由级动态导入）。 */
@@ -41,26 +40,6 @@ const ContactPage = lazy(() =>
 const PrivacyPage = lazy(() =>
   import("@/site/pages/PrivacyPage").then((m) => ({ default: m.PrivacyPage })),
 )
-/** 工作台按需加载：访客只看前台时不必下载编辑器代码（PRD O-6）。 */
-const AdminPageLazy = lazy(() =>
-  import("@/site/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
-)
-
-function AdminRoute() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-          正在加载运营工作台…
-        </div>
-      }
-    >
-      <SiteStoreProvider scope="draft">
-        <AdminPageLazy />
-      </SiteStoreProvider>
-    </Suspense>
-  )
-}
 
 /** 二级页按需加载的过渡态：只占位，不闪烁布局。 */
 function RouteLoading() {
@@ -95,26 +74,16 @@ function SiteLayout({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * 站点原型根：路由 + 布局。
- * 使用 HashRouter（原型阶段便于静态预览与刷新不回 404）。
- * - /admin 与 /admin/* 为运营工作台（独立布局，数据作用域=draft）。
- * - 站点页面作用域：URL 带 ?preview=1（预览模式）→ draft；否则 published。
- * - 预览模式下挂载 PreviewBridge，接收工作台的定位/高亮指令。
+ * 访客站根：只渲染对外站点（`www` 入口）。
+ * 登录页与运营工作台在 `AdminApp` 中，由 `admin.html` 单独构建，
+ * 这样访客产物里没有工作台代码，也没有 `/api` 与登录态。
+ * 站点页面作用域：URL 带 ?preview=1（预览模式）→ draft；否则 published。
  */
 export function SiteApp() {
   return (
     <HashRouter>
       <ScrollToTop />
       <Routes>
-        {/* 登录页（FR-AUTH）：独立布局，不放站点页头页脚 */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/login/" element={<LoginPage />} />
-
-        {/* 运营工作台（独立布局，草稿作用域，按需加载） */}
-        <Route path="/admin" element={<AdminRoute />} />
-        <Route path="/admin/*" element={<AdminRoute />} />
-
-        {/* 对外站点（统一布局，作用域随 preview 参数） */}
         <Route path="*" element={<SiteRoutes />} />
       </Routes>
     </HashRouter>
