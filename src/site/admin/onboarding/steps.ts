@@ -52,7 +52,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** 已知非秘密标识预填，减少用户输入 */
 export const DEFAULT_CONFIG: OnboardingConfig = {
-  appId: "cli_aa6581a487f8dcf6",
+  appId: "cli_aa780ddd2c389d1e",
   baseToken: "QYRqbmk9TaalWjsf1V5cp0qDnoX",
   gatewayUrl: "",
   callbackUrl: "",
@@ -144,7 +144,7 @@ export const ONBOARDING_STEPS: StepDef[] = [
     check: async (cfg) => {
       await sleep(450)
       if (/^cli_[a-z0-9]{12,}$/i.test(cfg.appId.trim())) {
-        return { status: "done", message: "应用标识格式正确，机器人能力已添加（OPC-site）" }
+        return { status: "done", message: "应用标识格式正确，机器人能力已添加（OPC-site-gateway）" }
       }
       return { status: "pending", message: "App ID 格式不正确，应以 cli_ 开头" }
     },
