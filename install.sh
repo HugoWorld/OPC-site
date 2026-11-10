@@ -65,6 +65,8 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo "已创建 .env"
 fi
+# .env 里有 App Secret 与会话密钥，只允许当前用户读写。
+chmod 600 .env 2>/dev/null || true
 
 secret="$(openssl rand -hex 32 2>/dev/null || true)"
 if [ -z "$secret" ]; then

@@ -71,18 +71,21 @@ bash install.sh --demo
 | 应用 | Node 网关：飞书 OAuth、12 表发布、快照、限流 | 不用 |
 | 数据 | 飞书多维表格 + 宿主机 `./data` 快照 | 不用 |
 | 部署 | Dockerfile + compose + `install.sh` | 一条命令 |
-| 升级 | `./hugow upgrade`（git pull + 重建） | 一条命令 |
+| 升级 | `./hugow upgrade`（镜像模式自动 pull；源码模式 git pull + 重建） | 一条命令 |
 | 备份 | `./hugow backup`（打包 `data/`） | 一条命令 |
 
 ### 镜像方式（可选）
 
-GitHub Actions 在 `main` 分支推送后自动构建镜像：
+GitHub Actions 在 `main` 分支推送后自动构建镜像，已公开发布到 GHCR：
 
 ```bash
-HUGOW_IMAGE=ghcr.io/hugoworld/opc-site:latest bash install.sh --image
+git clone https://github.com/HugoWorld/OPC-site.git
+cd OPC-site
+bash install.sh --image
 ```
 
-镜像名：`ghcr.io/hugoworld/opc-site`。首次构建完成后才可拉取；私有镜像需要先 `docker login ghcr.io`。
+镜像名：`ghcr.io/hugoworld/opc-site:latest`（公开仓库，无需 `docker login`）。
+首次拉取约 1~2 分钟；镜像内已包含 Nginx、Node 网关、双端静态产物和入口脚本。
 
 ## 工作台怎么用
 
@@ -108,7 +111,8 @@ HUGOW_IMAGE=ghcr.io/hugoworld/opc-site:latest bash install.sh --image
 ./hugow logs       # 实时日志
 ./hugow restart    # 改完 .env 后重启
 ./hugow backup     # 备份 data/ 快照
-./hugow upgrade    # 拉取 GitHub 最新代码并重建
+./hugow upgrade    # 拉取新版本；镜像模式自动 pull，源码模式重建
+./hugow upgrade --image  # 强制按 GHCR 镜像升级
 ./hugow stop       # 停止
 ```
 
@@ -126,7 +130,7 @@ HUGOW_IMAGE=ghcr.io/hugoworld/opc-site:latest bash install.sh --image
 
 ## 安全边界
 
-- App Secret 只存在服务器 `.env`，不进前端、不进 Git；`.env` 已被 `.gitignore` 忽略。
+- App Secret 只存在服务器 `.env`，不进前端、不进 Git；`.env` 已被 `.gitignore` 忽略，`install.sh` 会设为 `600`。
 - 网关只监听 `127.0.0.1:8787`，公网只能经 Nginx。
 - 工作台登录走飞书 OAuth，`ADMIN_OPEN_IDS` 是唯一白名单。
 - 会话用 HttpOnly Cookie；发布接口有管理员限流与单实例互斥。

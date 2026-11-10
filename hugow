@@ -22,8 +22,20 @@ case "${1:-help}" in
     ;;
   logs)    $COMPOSE logs -f --tail=100 ;;
   upgrade)
-    git pull --ff-only
-    $COMPOSE up -d --build
+    image="$(grep '^HUGOW_IMAGE=' .env 2>/dev/null | cut -d= -f2 || true)"
+    force_image=0
+    if [ "${2:-}" = "--image" ]; then
+      force_image=1
+    fi
+    # 镜像模式（install.sh --image）只拉新镜像，不在本机构建；
+    # 源码模式仍先 git pull，再重建。
+    if [ "$force_image" -eq 1 ] || { [ -n "$image" ] && [ "${image##*:}" != "local" ]; }; then
+      $COMPOSE pull
+      $COMPOSE up -d --no-build
+    else
+      git pull --ff-only
+      $COMPOSE up -d --build
+    fi
     ;;
   backup)
     mkdir -p backups
@@ -46,7 +58,8 @@ case "${1:-help}" in
   restart    重启
   status     查看容器与健康状态
   logs       实时日志
-  upgrade    拉取 GitHub 最新代码并重建
+  upgrade    拉取新版本并重启；镜像模式自动 pull，源码模式 git pull + 重建
+             ./hugow upgrade --image  强制按镜像模式升级
   backup     备份 data/ 快照目录
 EOF
     ;;
