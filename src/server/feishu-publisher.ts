@@ -23,9 +23,99 @@ import { createReleaseId } from "./local-snapshot.ts"
 export interface FeishuPublisherOptions {
   bitable: FeishuBitable
   snapshots: LocalSnapshotService
+  /** 显式指定表名 → table_id；不传则从 Base 按表名自动发现。 */
+  tableIds?: Record<string, string>
   /** 发布审计里的目标描述 */
   targetLabel?: string
   now?: () => number
+}
+
+export function parseTableIds(raw: string | undefined): Record<string, string> | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined
+    const out: Record<string, string> = {}
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) out[key] = value.trim()
+    }
+    return Object.keys(out).length > 0 ? out : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Base 表名允许大小写、空格、短横线差异；模板复制后仍能对上。 */
+export function normalizeTableName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-]+/g, "_")
+    .replace(/[^\w\u4e00-\u9fff]/g, "")
+}
+
+export interface TableIdResolution {
+  ids: Record<string, string>
+  missing: string[]
+  discovered: boolean
+  error?: string
+}
+
+/**
+ * 解析 12 张表的真实 table_id。
+ * 顺序：显式配置 → Base 表名 → 内置坐标兜底（仅用于 HugoW 自有 Base）。
+ * 兜底不能让复制模板的用户误连到原作者的 Base；表名对不上时报缺表。
+ */
+export async function resolveTableIds(
+  bitable: FeishuBitable,
+  explicit?: Record<string, string>,
+): Promise<TableIdResolution> {
+  const ids: Record<string, string> = {}
+  const missing: string[] = []
+  let discovered = false
+  let error: string | undefined
+
+  if (explicit && Object.keys(explicit).length > 0) {
+    for (const spec of Object.values(TABLE_SPECS)) {
+      const hit = explicit[spec.table]
+      if (hit) ids[spec.table] = hit
+      else missing.push(spec.table)
+    }
+    return { ids, missing, discovered: false }
+  }
+
+  if (!bitable.isConfigured()) {
+    return {
+      ids,
+      missing: Object.values(TABLE_SPECS).map((spec) => spec.table),
+      discovered: false,
+      error: "未配置 BITABLE_APP_TOKEN",
+    }
+  }
+
+  try {
+    const tables = await bitable.listTables()
+    const byName = new Map<string, string>()
+    for (const table of tables) {
+      byName.set(normalizeTableName(table.name), table.tableId)
+    }
+    discovered = byName.size > 0
+    for (const spec of Object.values(TABLE_SPECS)) {
+      const discoveredId = byName.get(normalizeTableName(spec.table))
+      ids[spec.table] = discoveredId ?? ""
+    }
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err)
+    // 读取表清单失败时保留内置坐标，至少不改变原有单 Base 的行为。
+    for (const spec of Object.values(TABLE_SPECS)) {
+      ids[spec.table] = FEISHU_TABLE_IDS[spec.table] ?? ""
+    }
+  }
+
+  for (const spec of Object.values(TABLE_SPECS)) {
+    if (!ids[spec.table]) missing.push(spec.table)
+  }
+  return { ids, missing, discovered, error }
 }
 
 function isRetryable(err: unknown): boolean {
@@ -151,12 +241,12 @@ async function writeTable(
 
 async function appendAudit(
   bitable: FeishuBitable,
+  tableId: string | undefined,
   operator: SessionPayload,
   result: "ok" | "partial" | "failed",
   target: string,
   at: number,
 ): Promise<void> {
-  const tableId = FEISHU_TABLE_IDS.audit_log
   if (!tableId) return
   try {
     const records = await bitable.listRecords(tableId)
@@ -194,14 +284,27 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
       const failedTables: TableFailure[] = []
 
       const tables = Object.keys(rowsByTable)
+      const resolution = await resolveTableIds(opts.bitable, opts.tableIds)
       for (const table of tables) {
         const spec = TABLE_SPECS[table]
-        const tableId = FEISHU_TABLE_IDS[table]
-        if (!spec || !tableId) {
+        const tableId = resolution.ids[table]
+        if (!spec) {
           failedTables.push({
             table,
             code: "TABLE_NOT_CONFIGURED",
-            message: `缺少 ${table} 的表契约或 table_id`,
+            message: `缺少 ${table} 的表契约`,
+            retryable: false,
+          })
+          continue
+        }
+        if (!tableId) {
+          failedTables.push({
+            table,
+            code: "TABLE_NOT_FOUND",
+            message:
+              `Base 中找不到表「${table}」` +
+              (resolution.error ? `（读取表清单失败：${resolution.error}）` : "") +
+              "；请确认已复制模板 Base，并把应用加入该 Base 的文档应用。",
             retryable: false,
           })
           continue
@@ -212,12 +315,12 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
       }
 
       if (writtenTables.length === 0) {
-        await appendAudit(opts.bitable, operator, "failed", targetLabel, at)
+        await appendAudit(opts.bitable, resolution.ids.audit_log, operator, "failed", targetLabel, at)
         return { status: "failed", failedTables }
       }
 
       if (failedTables.length > 0) {
-        await appendAudit(opts.bitable, operator, "partial", targetLabel, at)
+        await appendAudit(opts.bitable, resolution.ids.audit_log, operator, "partial", targetLabel, at)
         return { status: "partial", writtenTables, failedTables }
       }
 
@@ -238,7 +341,7 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
         }
       }
 
-      await appendAudit(opts.bitable, operator, "ok", targetLabel, at)
+      await appendAudit(opts.bitable, resolution.ids.audit_log, operator, "ok", targetLabel, at)
       return { status: "ok", version, writtenTables, at }
     },
   }

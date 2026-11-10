@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  command -v sudo >/dev/null 2>&1 || { echo "需要 sudo 权限" >&2; exit 1; }
+  SUDO="sudo"
+fi
+COMPOSE="$SUDO docker compose"
+
+case "${1:-help}" in
+  start)   $COMPOSE up -d ;;
+  stop)    $COMPOSE down ;;
+  restart) $COMPOSE up -d --force-recreate ;;
+  status)  $COMPOSE ps; echo; curl -fsS "http://127.0.0.1:${HUGOW_ADMIN_PORT:-8081}/api/health" || true; echo ;;
+  logs)    $COMPOSE logs -f --tail=100 ;;
+  upgrade)
+    git pull --ff-only
+    $COMPOSE up -d --build
+    ;;
+  backup)
+    mkdir -p backups
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    if [ -d data ]; then
+      tar -czf "backups/hugow-data-${stamp}.tar.gz" data
+      echo "已备份：backups/hugow-data-${stamp}.tar.gz"
+    else
+      echo "没有 data/ 目录，跳过" >&2
+    fi
+    ;;
+  help|*)
+    cat <<'EOF'
+用法：./hugow <命令>
+
+  start      启动
+  stop       停止
+  restart    重启
+  status     查看容器与健康状态
+  logs       实时日志
+  upgrade    拉取 GitHub 最新代码并重建
+  backup     备份 data/ 快照目录
+EOF
+    ;;
+esac

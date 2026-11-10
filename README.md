@@ -1,207 +1,147 @@
-<div align="center">
+# OPC 个人站 · 一键部署版
 
-# HugoW个人专业门户 · 高保真原型
+面向**律师、顾问、独立开发者等 0 基础非 IT 人群**的个人专业门户：
+访客站 + 可视化工作台 + 飞书多维表格数据 + 本机快照。
 
-一个人公司式的专业服务门户：前台站点 + 运营工作台 + 飞书多维表格数据契约。<br>
-React 19 · Vite 6 · TypeScript 5.7 · Tailwind CSS v4 · shadcn/ui
+不需要买 CDN、不需要对象存储、不需要数据库，也不需要登录服务器改内容。
+一台 2C2G Linux 云主机，一条命令，浏览器打开就能用。
 
-</div>
+![一键部署总览](docs/product/一键部署总览-v1.0.png)
 
----
+## 3 步跑起来
 
-## 这是什么
+### 第 1 步：准备一台 Linux 云主机
 
-这是一个**可运行的 Web 应用原型**，不是一个静态模板。它把「个人专业门户」拆成三件事，并给出各自的实现：
+- Ubuntu 22.04 / 24.04 或 Debian 12
+- 2 vCPU / 2 GB 内存 / 20 GB 磁盘（个人站足够）
+- 能访问 GitHub 与 Docker Hub；安全组放行 `8080`、`8081`
 
-| 角色 | 路径 | 说明 |
-| --- | --- | --- |
-| 访客看到的站点 | `#/` 及 12 条二级路由 | 首页、能做什么、怎么交付、文章、案例、大家评价、关于我、联系、隐私等 |
-| 运营者使用的工作台 | `#/admin/` | 12 个管理栏目，草稿与已发布双层数据，右侧实时预览 |
-| 登录入口 | `#/login/` | 飞书账号授权（当前为模拟实现）+ 未登录访问的拦截引导 |
-
-设计目标不是「好看的个人主页」，而是把**专业服务里最重复的部分**沉淀成可交付、可验收的流程资产——所以站点结构围绕服务模块、交付流程、边界声明来组织，而不是围绕个人履历堆砌。
-
-## 在线演示
-
-已通过豆包云（doubao-html）发布，构建产物直接部署、无需服务端：
-
-- 站点前台：https://scnggxoitbu6.doubao.link/app/app_17hjnfbagtw
-- 运营工作台（模拟登录）：同一地址的 `#/login/` → `#/admin/`
-
-> 演示环境为原型构建产物，数据存在访客浏览器本地，换设备看到的是初始内容。
-
-## 预览
-
-| 站点前台 | 运营工作台 |
-| --- | --- |
-| ![首页](docs/screenshots/01-home.png) | ![工作台](docs/screenshots/02-admin.png) |
-| **登录页** | **数据源状态** |
-| ![登录页](docs/screenshots/03-login.png) | ![数据源](docs/screenshots/04-admin-datasource.png) |
-
-> 截图保存在 docs/screenshots/，由本地运行后截取。
-
-## 功能清单
-
-**站点前台**
-
-- 首页：Bento 区块布局、玻璃拟态卡片、Hero 人设区、数字条、服务模块、交付流程、演示面板、客户证言、文章与分享
-- 11 种可组合区块类型：`hero` `stats` `cards` `text` `faq` `timeline` `cta` `columns` `gallery` `pricing` `testimonials`
-- 10 套主题包（配色与排版令牌），一键切换整站视觉
-- HashRouter 路由，纯静态托管即可运行，无需服务端
-
-**运营工作台**
-
-- 12 个管理栏目：总览 / 站点信息 / 首页内容 / 产品管理 / 分享管理 / 能力模块 / 文章与案例 / 方法与 FAQ / 关于我 / 页面管理 / 主题与排版 / 发布与导出
-- **草稿 / 已发布双层数据**：编辑先写草稿，发布后前台才生效；两个作用域独立存储
-- 分组可折叠的内容编辑器，字段级修改即存即生效
-- 右侧实时预览面板：滚动定位、区块高亮、全屏平铺
-- 发布前差异检查与二次确认，支持单切片重置
-- 页面管理：新建自定义页面、导入 JSON、区块编排
-- 数据源状态面板：明确区分「本机缓存」与「飞书多维表格（未接入）」
-
-**认证**
-
-- 未登录访问 `#/admin/*` 会被拦截并引导到 `#/login/?next=...`
-- 会话 12 小时过期，`localStorage` 键 `hugow-admin-session-v1`
-- 当前为**模拟登录**（`source: "mock"`），页面明确标注「原型 · 模拟登录」；真实飞书 OAuth 的接入点已在代码中预留
-
-## 技术栈
-
-| 层 | 选型 |
-| --- | --- |
-| 框架 | React 19 + TypeScript 5.7 |
-| 构建 | Vite 6（`tsc -b && vite build`） |
-| 样式 | Tailwind CSS v4（`@tailwindcss/vite`，CSS 变量驱动主题） |
-| 组件 | shadcn/ui 风格 + Radix UI 原语 + lucide-react 图标 |
-| 路由 | react-router-dom 7（HashRouter，静态托管友好） |
-| 动效 | motion（局部转场与卡片入场） |
-
-## 快速开始
-
-要求 **Node.js ≥ 22.6**（构建 ≥ 20 即可，但 `test:*` 依赖 `node --experimental-strip-types`，需要 22.6+）。
+### 第 2 步：拉取并执行
 
 ```bash
-npm install
-npm run dev          # 默认 http://localhost:5173
-npm run build:all    # 类型检查 + 双产物：dist/（访客）+ dist-admin/（管理台）
-npm run preview      # 预览构建产物
-npm run typecheck    # 只做类型检查
-npm run verify       # 双产物构建 + 4 组测试 + 文案/资源红线检查 + 冒烟
+git clone https://github.com/HugoWorld/OPC-site.git
+cd OPC-site
+bash install.sh
 ```
 
-Windows 提示：npm 的原生依赖按平台下载，请在目标机器上执行 `npm install`；从 Linux 容器拷贝的 `node_modules` 会因缺少 `win32-x64` 原生包而报 `Cannot find module @rollup/rollup-win32-x64-msvc`。
+脚本会自动：检查/安装 Docker → 生成 `.env` 与会话密钥 → 构建镜像 → 启动 Nginx + Node 网关 → 健康检查。
+首次 3~8 分钟，取决于网络。
 
-## 目录结构
+### 第 3 步：打开浏览器
 
-```
-src/
-├─ main.tsx                 应用入口
-├─ App.tsx                  应用装配
-├─ index.css                Tailwind v4 入口 + 设计令牌 + 玻璃拟态基座
-├─ components/ui/           shadcn 风格基础组件（button、dialog、sheet 等）
-├─ lib/utils.ts             class 合并等工具
-└─ site/
-   ├─ SiteApp.tsx           站点路由装配：前台 / 工作台 / 登录 / 404
-   ├─ data/                 内容数据（改这里就是改站点内容）
-   │  ├─ home.ts            首页 Hero、数字条、区块配置
-   │  ├─ solutions.ts       服务模块（能力卡片）
-   │  ├─ products.ts        产品卡
-   │  ├─ writing.ts         文章与案例
-   │  ├─ method.ts          交付流程、价格、FAQ
-   │  ├─ about.ts  site.ts  关于我、导航、页脚、联系
-   │  ├─ pages.ts           自定义页面注册表
-   │  └─ themes.ts          10 套主题包令牌
-   ├─ pages/                13 个页面组件 + DynamicPage 通用渲染器
-   ├─ components/           Header、Footer、Hero、演示、分享等区块组件
-   └─ admin/
-      ├─ store.tsx          草稿/发布双层数据、深合并、发布与重置
-      ├─ auth.tsx           会话层 + 未登录拦截门
-      ├─ bitable.ts         飞书多维表格契约（12 张表 + 环境空位）
-      ├─ AdminPage.tsx      12 栏工作台
-      ├─ forms.tsx          通用分组表单编辑器
-      └─ PageManager.tsx    页面与区块管理
-```
+- 访客站：`http://服务器IP:8080`
+- 工作台：`http://服务器IP:8081`
 
-## 配置说明
-
-**改内容**：只改 `src/site/data/*.ts`，不要动组件。每个文件顶部都有类型定义，字段改名会立刻被 TypeScript 拦下。
-
-**改主题**：`src/site/data/themes.ts` 中是 10 套主题令牌（主色、辅色、圆角、字体栈）。工作台「主题与排版」可直接切换，切换后通过 CSS 变量注入全站生效。
-
-**改路由**：`src/site/SiteApp.tsx` 是统一的路由装配点，新增页面需同时登记到 `src/site/data/pages.ts`。
-
-**接入飞书**：`src/site/admin/bitable.ts` 预留了三个空位，填齐后 `bitableReady()` 返回 true，工作台的数据源状态会自动从「本机缓存」变为「飞书多维表格」：
-
-```ts
-export const BITABLE_ENV = {
-  appToken: "",      // 多维表格 Base 的 app_token
-  gateway: "",       // 你的薄网关地址，如 https://api.example.com
-  callbackUrl: "",   // 飞书应用后台登记的回调地址
-};
-```
-
-`app_secret` **不放在这里**。换 token 必须发生在服务端，前端只拿网关签发的会话。
-
-## 飞书接入现状（重要）
-
-当前仓库里飞书能力是**契约层**，不是已接入状态：
-
-- 12 张表的结构与切片映射已冻结（`BITABLE_TABLES`），与本项目设计文档中的表结构逐条对齐
-- `pullAll()` / `pushAll()` 在未接入时统一返回 `ok: false`，调用方自动回落本机存储，不会静默丢数据
-- 真实接入需要四件事：域名 + HTTPS（回调地址在飞书应用后台登记）、一个持有 `app_secret` 的薄网关、多维表格授权给应用、各表 `table_id`
-
-网关已实现的路由（`src/server/gateway.ts`，平台无关处理函数，含单元测试）：
-
-```
-GET  /api/health           健康检查与请求计数
-GET  /api/auth/callback    飞书授权回跳：换票 → 白名单 → 建会话 → 302 回工作台（Set-Cookie）
-POST /api/auth/exchange    前端直连换会话（同一套换票逻辑，返回 JSON）
-GET  /api/auth/me          校验会话，返回 name / avatar / open_id 尾号
-POST /api/auth/logout      清会话、清 Cookie
-POST /api/publish          发布草稿（会话鉴权 + 按管理员限流 + 单实例串行锁）
-GET  /api/snapshot/current 读取发布快照
-```
-
-> 网关的 Node HTTP 入口（`src/server/main.ts`，监听 `127.0.0.1:8787`）**尚未提交**，属部署前必补项；
-> 处理函数与测试已就绪。
-
-## 构建与部署
+如果只想先看访客站、暂时不接飞书：
 
 ```bash
-npm run build:site   # 访客站 → dist/
-npm run build:admin  # 管理台 → dist-admin/（含 index.html）
+bash install.sh --demo
 ```
 
-部署要点：
+演示模式不校验飞书凭据，访客站可直接浏览；工作台只到登录页，不会写任何飞书数据。
 
-- 正式形态是**单机自托管**：一台云主机上 Nginx 双 vhost，`www` 服务 `dist/`、`admin` 服务 `dist-admin/` 并反代 `/api`；**不接 CDN、不接对象存储**
-- 网关是同机 Node 进程（systemd，`127.0.0.1:8787`），只服务管理台的 `/api`
-- HashRouter 由前端处理路由，但服务端仍需 SPA 回退（所有路径回落 `index.html`）
-- `index.html` `no-cache`，`assets/*`（带内容 hash）长缓存；发布快照写本机 `/srv/hugow/data`
-- 若启用飞书登录，`admin` 与 `/api` 必须同域，Cookie 才能生效
+## 第一次配置：只要 4 个值
 
-## 已知限制
+![首次配置四步](docs/product/首次配置四步-v1.0.png)
 
-这是原型，不是生产系统，以下问题如实记录：
+| 值 | 从哪里来 | 写到 `.env` |
+|---|---|---|
+| App ID / App Secret | 飞书开放平台 → 企业自建应用 → 凭证与基础信息 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` |
+| Base app_token | 多维表格 URL 中 `/base/` 后面那一段 | `BITABLE_APP_TOKEN` |
+| 管理员 open_id | 飞书个人资料；只允许这个人登录工作台 | `ADMIN_OPEN_IDS` |
+| 会话密钥 | `install.sh` 自动生成；也可 `openssl rand -hex 32` | `SESSION_SECRET` |
 
-- 数据默认存本机 `localStorage`，换浏览器或清缓存即丢失；多人协作需要接入多维表格或数据库
-- 登录为模拟实现，未接真实飞书 OAuth；`MOCK_USER` 的 `open_id` 是占位值
-- 仓库中没有真实客户案例与证言，样例为演示文案
-- 图片已本地化为站内 webp（头像三档 + 背景），不再依赖外链图床
-- 访客产物与工作台产物已拆分，入口块 gzip 约 30 kB，AdminPage 只在 `dist-admin`
-- 自动化验证覆盖到冒烟级：`scripts/smoke.mjs`（Playwright，路由可达、双入口隔离、登录拦截、图片加载），更完整的 E2E（真实授权回调链路）待网关部署后补
+填完把 `HUGOW_DEMO=0`，执行：
 
-## 内容与合规
+```bash
+./hugow restart
+```
 
-站点文案有一条明确的边界：不承诺案件结果、胜诉率、咨询成效，不写「保证」「100%」「零风险」这类表述。专业意见的最终出具由执业人员复核确认。这条规则同样适用于二次开发——如果要做同类站点，请保留边界声明。
+> 飞书网页授权要求回调地址是 HTTPS 域名。正式启用登录前，需要把域名解析到服务器，
+> 并在飞书后台把 `https://你的域名/api/auth/callback` 登记为重定向 URL。
+> 本地 `http://127.0.0.1:8081` 只用于部署自检，飞书一般不允许作为正式回调。
 
-## Roadmap
+## 它到底装了什么
 
-- [ ] 真实飞书 OAuth + 薄网关（七条路由与 27 项单测已就绪；仍缺 `main.ts` 入口、真实 `FeishuClient`、工作台登录切换与单机部署）
-- [ ] 多维表格双向同步与冲突处理（当前为单向覆盖；`FeishuAdapter` 尚未实现）
-- [x] 路由级代码拆包（访客/管理台双入口）
-- [x] Playwright/k6 冒烟与压测脚本（登录、发布、未登录拦截、并发基线；k6 尚未在真实云主机执行）
-- [ ] 图片上传落本机 `/srv/hugow/media` 并纳入每日备份（不使用对象存储直传）
+| 层 | 实现 | 你需要管吗 |
+|---|---|---|
+| 入口 | 容器内 Nginx：8080 访客、8081 工作台、`/api` 反代 | 不用 |
+| 应用 | Node 网关：飞书 OAuth、12 表发布、快照、限流 | 不用 |
+| 数据 | 飞书多维表格 + 宿主机 `./data` 快照 | 不用 |
+| 部署 | Dockerfile + compose + `install.sh` | 一条命令 |
+| 升级 | `./hugow upgrade`（git pull + 重建） | 一条命令 |
+| 备份 | `./hugow backup`（打包 `data/`） | 一条命令 |
+
+### 镜像方式（可选）
+
+GitHub Actions 在 `main` 分支推送后自动构建镜像：
+
+```bash
+HUGOW_IMAGE=ghcr.io/hugoworld/opc-site:latest bash install.sh --image
+```
+
+镜像名：`ghcr.io/hugoworld/opc-site`。首次构建完成后才可拉取；私有镜像需要先 `docker login ghcr.io`。
+
+## 工作台怎么用
+
+1. 打开 `http://服务器IP:8081`，用飞书账号登录（需在 `ADMIN_OPEN_IDS` 白名单）。
+2. 左侧 12 个栏目：站点信息、首页内容、产品、分享、能力模块、文章、方法 FAQ、关于我、页面、主题、发布。
+3. 改内容先写**草稿**，右侧实时预览；点「发布」才写入飞书 Base 并生成本机快照，访客站随即更新。
+4. 发布失败不会切换当前快照，访客继续看到上一版完整内容。
+
+## 12 张表与可复制性
+
+项目使用 12 张飞书多维表格：`site_config`、`home_blocks`、`solutions`、`articles`、`products`、`shares`、`pages`、`method_faq`、`about`、`theme`、`samples_testimonials`、`audit_log`。
+
+- 表 ID **不再写死**：启动后按表名自动发现 `table_id`，复制模板 Base 后不需要改代码。
+- 表名必须与代码中的 12 个英文名一致；字段清单见 [`docs/product/12表字段清单.csv`](docs/product/12表字段清单.csv)。
+- 找不到表时，发布会返回 `TABLE_NOT_FOUND`，并提示检查 Base 是否复制完整、应用是否加入文档应用。
+
+> 当前版本仍需要你准备一个包含这 12 张表的 Base。自动建表是下一阶段能力，不在本版承诺内。
+
+## 常用命令
+
+```bash
+./hugow status     # 容器状态 + 健康检查
+./hugow logs       # 实时日志
+./hugow restart    # 改完 .env 后重启
+./hugow backup     # 备份 data/ 快照
+./hugow upgrade    # 拉取 GitHub 最新代码并重建
+./hugow stop       # 停止
+```
+
+## 常见问题
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `install.sh` 装 Docker 失败 | 服务器无法访问 `get.docker.com` 或没有 root | 手动装 Docker 后执行 `bash install.sh --no-docker-install` |
+| 8080/8081 打不开 | 安全组/防火墙未放行 | 放行端口；或改 `.env` 的 `HUGOW_WWW_PORT` / `HUGOW_ADMIN_PORT` |
+| 登录报 `20029` | 飞书回调地址与 `.env` / 后台登记不一致 | 三处改成同一个 HTTPS 地址；本地 http 不作为正式回调 |
+| 登录报 `21001` | 飞书平台策略拒绝应用换 token | 开放平台侧处理；不是代码问题 |
+| 发布报 `TABLE_NOT_FOUND` | Base 缺表或表名不一致 | 核对 12 个表名；应用加入 Base 文档应用 |
+| 登录后立刻掉线 | HTTPS 下 `COOKIE_SECURE=false` 或 HTTP 下为 `true` | 正式 HTTPS 设 `true`；本地 http 设 `false` |
+| 发布后访客没变化 | 浏览器缓存或发布失败 | 刷新；查 `./hugow logs` 与 `/api/health` |
+
+## 安全边界
+
+- App Secret 只存在服务器 `.env`，不进前端、不进 Git；`.env` 已被 `.gitignore` 忽略。
+- 网关只监听 `127.0.0.1:8787`，公网只能经 Nginx。
+- 工作台登录走飞书 OAuth，`ADMIN_OPEN_IDS` 是唯一白名单。
+- 会话用 HttpOnly Cookie；发布接口有管理员限流与单实例互斥。
+- 站点文案不承诺案件结果、胜诉率、咨询成效；二次开发请保留边界声明。
+
+## 开发者
+
+```bash
+npm ci
+npm run dev          # 本地开发
+npm run build:all    # 双产物：dist/ + dist-admin/
+npm run verify       # 类型、测试、同步、文案、资源、冒烟
+```
+
+仓库结构、原生 Nginx + systemd 部署、证书与备份见 [`deploy/README.md`](deploy/README.md)。
+0 基础逐步操作见 [`docs/product/部署指南-v1.0.md`](docs/product/部署指南-v1.0.md)。
+产品化阶段评审与问题记录见 [`docs/product/阶段评审-v1.0.md`](docs/product/阶段评审-v1.0.md)。
 
 ## License
 

@@ -11,6 +11,7 @@ export interface GatewayConfig {
   host: string
   port: number
   dataDir: string
+  demoMode: boolean
   appId: string
   appSecret: string
   bitableAppToken: string
@@ -55,6 +56,7 @@ function splitIds(raw: string): string[] {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
   const port = envNumber(env, "PORT", 8787)
   const host = envString(env, "HOST", "127.0.0.1")
+  const demoMode = envBool(env, "HUGOW_DEMO", false)
   const publicGatewayOrigin =
     envString(env, "PUBLIC_GATEWAY_ORIGIN", `http://${host}:${port}`).replace(/\/$/, "")
   const publicAdminOrigin = envString(
@@ -69,14 +71,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
   const sessionSecret = envString(env, "SESSION_SECRET")
   const adminOpenIds = splitIds(envString(env, "ADMIN_OPEN_IDS"))
 
-  if (!appId || !appSecret) {
-    throw new Error("缺少 FEISHU_APP_ID / FEISHU_APP_SECRET（见 deploy/gateway.env.example）")
-  }
-  if (sessionSecret.length < 16) {
-    throw new Error("SESSION_SECRET 至少需要 16 个字符")
-  }
-  if (adminOpenIds.length === 0) {
-    throw new Error("ADMIN_OPEN_IDS 至少需要一个管理员 open_id")
+  if (!demoMode) {
+    if (!appId || !appSecret) {
+      throw new Error("缺少 FEISHU_APP_ID / FEISHU_APP_SECRET（见 deploy/gateway.env.example）")
+    }
+    if (sessionSecret.length < 16) {
+      throw new Error("SESSION_SECRET 至少需要 16 个字符")
+    }
+    if (adminOpenIds.length === 0) {
+      throw new Error("ADMIN_OPEN_IDS 至少需要一个管理员 open_id")
+    }
   }
 
   const redirectUri = envString(
@@ -88,12 +92,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
   return {
     host,
     port,
+    demoMode,
     dataDir: path.resolve(envString(env, "DATA_DIR", "./data")),
-    appId,
-    appSecret,
+    appId: appId || "demo-app",
+    appSecret: appSecret || "demo-secret",
     bitableAppToken: envString(env, "BITABLE_APP_TOKEN"),
-    adminOpenIds,
-    sessionSecret,
+    adminOpenIds: adminOpenIds.length > 0 ? adminOpenIds : ["demo-open-id"],
+    sessionSecret: sessionSecret.length >= 16 ? sessionSecret : "demo-session-secret-not-for-production",
     sessionTtlMs: envNumber(env, "SESSION_TTL_MS", 12 * 3600 * 1000),
     secureCookies: envBool(
       env,

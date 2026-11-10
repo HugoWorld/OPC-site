@@ -24,9 +24,15 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SRC_ROOT = path.resolve(HERE, "..")
 const REPO_ROOT = path.resolve(SRC_ROOT, "../_repo/OPC-site")
 
-const MANIFEST_DIRS = ["src", "scripts"]
+const MANIFEST_DIRS = ["src", "scripts", "deploy", "docs/product", ".github"]
 const MANIFEST_FILES = [
   ".gitignore",
+  ".dockerignore",
+  ".env.example",
+  "Dockerfile",
+  "compose.yaml",
+  "install.sh",
+  "hugow",
   "package.json",
   "package-lock.json",
   "tsconfig.json",

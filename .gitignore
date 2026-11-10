@@ -5,10 +5,13 @@ dist-ssr
 *.local
 .env
 .env.*
+!.env.example
 .DS_Store
 .vite
 *.tsbuildinfo
 *.log
+data
+backups
 
 # 本地源图不入库：仓库只保留站内使用的 webp 派生图
 src/site/assets/hero-avatar.png

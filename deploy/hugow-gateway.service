@@ -1,0 +1,40 @@
+# ==================================================================
+# HugoW 网关 systemd 单元
+# 安装到 /etc/systemd/system/hugow-gateway.service
+# __APP_ROOT__ 由 deploy.sh 替换为 /srv/hugow
+# ==================================================================
+
+[Unit]
+Description=HugoW personal site gateway (Feishu OAuth + 12-table publish)
+Documentation=https://github.com/HugoWorld/OPC-site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hugow
+Group=hugow
+WorkingDirectory=__APP_ROOT__/gateway
+EnvironmentFile=/etc/hugow/gateway.env
+
+# Node 22 的 type stripping 直接运行 TypeScript，不需要构建服务端
+ExecStart=/usr/bin/node --experimental-strip-types src/server/main.ts
+
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+KillSignal=SIGTERM
+SyslogIdentifier=hugow-gateway
+
+# 只写数据目录；代码与配置保持只读
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__APP_ROOT__/data
+UMask=0022
+LimitNOFILE=65535
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

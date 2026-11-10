@@ -25,6 +25,7 @@ jobs:
         run: |
           npm run test:schema
           npm run test:gateway
+          npm run test:gateway-http
           npm run test:publish-guard
           npm run test:migration
       # 文案红线与资源本地化检查（FR-SAFE / O-3），访客与管理台产物都扫

@@ -26,6 +26,12 @@ interface RecordPage {
   page_token?: string
 }
 
+interface TablePage {
+  items?: Array<{ table_id?: string; name?: string }>
+  has_more?: boolean
+  page_token?: string
+}
+
 interface TenantTokenResponse {
   code?: number
   msg?: string
@@ -50,6 +56,31 @@ export class FeishuBitable {
   private readonly fetchImpl: FetchLike
   private readonly timeoutMs: number
   private token: { value: string; expiresAt: number } | null = null
+
+  isConfigured(): boolean {
+    return Boolean(this.appToken)
+  }
+
+  /** 列出 Base 内全部数据表；复制模板 Base 后表 ID 会变，必须按表名解析。 */
+  async listTables(): Promise<Array<{ tableId: string; name: string }>> {
+    const out: Array<{ tableId: string; name: string }> = []
+    let pageToken = ""
+    do {
+      const query = new URLSearchParams({ page_size: "100" })
+      if (pageToken) query.set("page_token", pageToken)
+      const path =
+        `/open-apis/bitable/v1/apps/${encodeURIComponent(this.appToken)}` +
+        `/tables?${query.toString()}`
+      const page = await this.call<TablePage>("GET", path)
+      for (const item of page?.items ?? []) {
+        if (item.table_id && item.name) {
+          out.push({ tableId: item.table_id, name: item.name })
+        }
+      }
+      pageToken = page?.has_more && page.page_token ? page.page_token : ""
+    } while (pageToken)
+    return out
+  }
 
   constructor(opts: FeishuBitableOptions) {
     this.baseUrl = (opts.baseUrl ?? "https://open.feishu.cn").replace(/\/$/, "")

@@ -73,6 +73,8 @@ export interface GatewayDeps {
   rateLimiter?: RateLimiter
   /** 按路由覆盖默认限流规则 */
   rateRules?: Partial<RateLimitRules>
+  /** 演示模式：未配置飞书凭据也能启动访客站与工作台外壳，不提供登录 */
+  demoMode?: boolean
 }
 
 export interface RateLimitRules {
@@ -384,6 +386,9 @@ export function createGateway(deps: GatewayDeps) {
 
     /* GET /api/auth/start：浏览器跳到飞书授权页，state 用签名前的随机值 + 回跳路径。 */
     if (path === "/api/auth/start" && method === "GET") {
+      if (deps.demoMode) {
+        return error(503, "DEMO_MODE", "当前是演示模式，尚未配置飞书应用凭据")
+      }
       if (!deps.oauth) return error(501, "OAUTH_NOT_CONFIGURED", "未配置飞书 OAuth")
       const qIndex = req.url.indexOf("?")
       const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
@@ -474,6 +479,7 @@ export function createGateway(deps: GatewayDeps) {
         oauthConfigured: Boolean(deps.oauth),
         adminCount: deps.adminOpenIds.length,
         secureCookies: deps.secureCookies ?? true,
+        demoMode: Boolean(deps.demoMode),
       })
     }
 

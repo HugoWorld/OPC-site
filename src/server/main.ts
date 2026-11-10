@@ -16,7 +16,7 @@ import {
 import { loadConfig } from "./config.ts"
 import { createFeishuClient, buildFeishuAuthorizeUrl } from "./feishu-client.ts"
 import { FeishuBitable } from "./feishu-bitable.ts"
-import { createFeishuPublisher } from "./feishu-publisher.ts"
+import { createFeishuPublisher, parseTableIds } from "./feishu-publisher.ts"
 import { createLocalSnapshotService } from "./local-snapshot.ts"
 import { createSignedSessionStore } from "./session.ts"
 
@@ -57,7 +57,11 @@ async function main(): Promise<void> {
     appToken: config.bitableAppToken,
     baseUrl: config.feishuBaseUrl,
   })
-  const publisher = createFeishuPublisher({ bitable, snapshots })
+  const publisher = createFeishuPublisher({
+    bitable,
+    snapshots,
+    tableIds: parseTableIds(process.env.FEISHU_TABLE_IDS_JSON),
+  })
   const sessions = createSignedSessionStore({ secret: config.sessionSecret })
   const feishu = createFeishuClient({
     appId: config.appId,
@@ -74,6 +78,7 @@ async function main(): Promise<void> {
     adminOpenIds: config.adminOpenIds,
     sessionTtlMs: config.sessionTtlMs,
     secureCookies: config.secureCookies,
+    demoMode: config.demoMode,
     publicAdminOrigin: config.publicAdminOrigin,
     adminEntryPath: config.adminEntryPath,
     oauth: {

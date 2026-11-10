@@ -25,6 +25,7 @@ const ERROR_TEXT: Record<string, string> = {
   rate_limited: "登录尝试过于频繁，请稍后再试。",
   upstream: "飞书授权服务暂时不可用，请稍后重试。",
   oauth_config: "网关尚未配置飞书应用凭据，请先完成部署配置。",
+  demo_mode: "当前是演示模式，只跑通了访客站；配置飞书凭据后即可登录工作台。",
 }
 
 /**
