@@ -5,6 +5,12 @@ set -euo pipefail
 # OPC 个人站 · 一键安装
 # 目标：一台干净的 Linux 云主机，执行 bash install.sh 即可。
 # 会做：检查/安装 Docker → 生成 .env → 构建并启动容器 → 健康检查
+#
+# 参数：
+#   --demo               演示模式，不询问飞书配置；访客站可看
+#   --image              使用 GHCR 预构建镜像，不在本机构建
+#   --no-docker-install   不自动安装 Docker（需已手动安装）
+#   --non-interactive     不交互，全部用演示模式
 # ------------------------------------------------------------------
 
 cd "$(dirname "$0")"
@@ -108,9 +114,13 @@ else
 fi
 
 say "4/5 等待服务就绪"
+www_port="$(grep '^HUGOW_WWW_PORT=' .env | cut -d= -f2)"
+admin_port="$(grep '^HUGOW_ADMIN_PORT=' .env | cut -d= -f2)"
+www_port="${www_port:-8080}"
+admin_port="${admin_port:-8081}"
 ready=0
 for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:${HUGOW_ADMIN_PORT:-8081}/api/health" >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:${admin_port}/api/health" >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -123,10 +133,6 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 say "5/5 完成"
-www_port="$(grep '^HUGOW_WWW_PORT=' .env | cut -d= -f2)"
-admin_port="$(grep '^HUGOW_ADMIN_PORT=' .env | cut -d= -f2)"
-www_port="${www_port:-8080}"
-admin_port="${admin_port:-8081}"
 cat <<EOF
 
 访客站：   http://127.0.0.1:${www_port}
