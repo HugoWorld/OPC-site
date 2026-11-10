@@ -14,7 +14,12 @@ case "${1:-help}" in
   start)   $COMPOSE up -d ;;
   stop)    $COMPOSE down ;;
   restart) $COMPOSE up -d --force-recreate ;;
-  status)  $COMPOSE ps; echo; curl -fsS "http://127.0.0.1:${HUGOW_ADMIN_PORT:-8081}/api/health" || true; echo ;;
+  status)
+    $COMPOSE ps
+    echo
+    health="$($SUDO docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' hugow-opc 2>/dev/null || true)"
+    echo "健康状态：${health:-unknown}"
+    ;;
   logs)    $COMPOSE logs -f --tail=100 ;;
   upgrade)
     git pull --ff-only
@@ -23,11 +28,13 @@ case "${1:-help}" in
   backup)
     mkdir -p backups
     stamp="$(date +%Y%m%d-%H%M%S)"
-    if [ -d data ]; then
-      tar -czf "backups/hugow-data-${stamp}.tar.gz" data
+    data_dir="$(grep '^HUGOW_DATA_DIR=' .env 2>/dev/null | cut -d= -f2)"
+    data_dir="${data_dir:-./data}"
+    if [ -d "$data_dir" ]; then
+      tar -czf "backups/hugow-data-${stamp}.tar.gz" "$data_dir"
       echo "已备份：backups/hugow-data-${stamp}.tar.gz"
     else
-      echo "没有 data/ 目录，跳过" >&2
+      echo "没有 ${data_dir} 目录，跳过" >&2
     fi
     ;;
   help|*)

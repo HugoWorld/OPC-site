@@ -81,17 +81,19 @@ async function main(): Promise<void> {
     demoMode: config.demoMode,
     publicAdminOrigin: config.publicAdminOrigin,
     adminEntryPath: config.adminEntryPath,
-    oauth: {
-      redirectUri: config.redirectUri,
-      authorizeUrl: (state, redirectUri) =>
-        buildFeishuAuthorizeUrl({
-          appId: config.appId,
-          redirectUri,
-          state,
-          scope: config.oauthScope,
-          accountsBase: config.feishuAccountsBaseUrl,
-        }),
-    },
+    oauth: config.demoMode
+      ? undefined
+      : {
+          redirectUri: config.redirectUri,
+          authorizeUrl: (state, redirectUri) =>
+            buildFeishuAuthorizeUrl({
+              appId: config.appId,
+              redirectUri,
+              state,
+              scope: config.oauthScope,
+              accountsBase: config.feishuAccountsBaseUrl,
+            }),
+        },
   })
 
   const server = http.createServer((req, res) => {

@@ -6,6 +6,8 @@
 不需要买 CDN、不需要对象存储、不需要数据库，也不需要登录服务器改内容。
 一台 2C2G Linux 云主机，一条命令，浏览器打开就能用。
 
+> 先看效果（豆包静态访客站，不含登录/发布）：<https://scnggxoitbu6.doubao.link/app/app_17htfakm32k>
+
 ![一键部署总览](docs/product/一键部署总览-v1.0.png)
 
 ## 3 步跑起来

@@ -2,9 +2,10 @@
 /* 运营工作台登录页：跳转飞书网页授权，不再提供模拟登录。                 */
 /* ------------------------------------------------------------------ */
 
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 
-import { startFeishuLogin } from "@/site/admin/auth"
+import { apiUrl, startFeishuLogin } from "@/site/admin/auth"
 
 function readLoginQuery(): { next: string; error: string } {
   const raw = window.location.hash.replace(/^#/, "")
@@ -34,6 +35,22 @@ const ERROR_TEXT: Record<string, string> = {
  */
 export function LoginPage() {
   const { next, error } = readLoginQuery()
+  const [demoMode, setDemoMode] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void fetch(apiUrl("/api/setup"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { demoMode?: boolean } | null) => {
+        if (alive && body?.demoMode) setDemoMode(true)
+      })
+      .catch(() => {
+        /* 网关未启动时保持默认，不影响页面展示 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -88,10 +105,25 @@ export function LoginPage() {
             </p>
           ) : null}
 
+          {demoMode ? (
+            <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800">
+              当前是演示模式：访客站已经跑通，工作台登录未启用。填好
+              <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
+                .env
+              </code>
+              里的飞书 4 项，把
+              <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
+                HUGOW_DEMO
+              </code>
+              改成 0，再重启即可。
+            </p>
+          ) : null}
+
           <button
             type="button"
             onClick={() => startFeishuLogin(next)}
-            className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#3370ff] text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+            disabled={demoMode}
+            className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#3370ff] text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="grid size-5 place-items-center rounded bg-white/15 text-[11px] font-bold">飞</span>
             使用飞书账号登录

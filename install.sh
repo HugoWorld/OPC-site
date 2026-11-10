@@ -103,6 +103,22 @@ else
   fi
 fi
 
+# 真实登录必须让飞书回调到「浏览器能访问的地址」，不能是服务器自己的 127.0.0.1。
+if grep -q '^HUGOW_DEMO=0' .env; then
+  admin_port="$(grep '^HUGOW_ADMIN_PORT=' .env | cut -d= -f2)"
+  admin_port="${admin_port:-8081}"
+  public_ip="$(curl -fsS --max-time 5 https://ifconfig.me 2>/dev/null || true)"
+  if [ -z "$public_ip" ]; then
+    public_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  public_ip="${public_ip:-127.0.0.1}"
+  origin="http://${public_ip}:${admin_port}"
+  set_env PUBLIC_GATEWAY_ORIGIN "$origin"
+  set_env PUBLIC_ADMIN_ORIGIN "$origin"
+  set_env FEISHU_REDIRECT_URI "${origin}/api/auth/callback"
+  echo "访问地址按 ${origin} 生成；绑定 HTTPS 域名后请改 .env 的 PUBLIC_* 与 FEISHU_REDIRECT_URI。"
+fi
+
 say "3/5 构建并启动（首次约 3~8 分钟）"
 if [ "$USE_IMAGE" -eq 1 ]; then
   set_env HUGOW_IMAGE ghcr.io/hugoworld/opc-site:latest
@@ -120,7 +136,8 @@ www_port="${www_port:-8080}"
 admin_port="${admin_port:-8081}"
 ready=0
 for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:${admin_port}/api/health" >/dev/null 2>&1; then
+  health="$($SUDO docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' hugow-opc 2>/dev/null || true)"
+  if [ "$health" = "healthy" ]; then
     ready=1
     break
   fi

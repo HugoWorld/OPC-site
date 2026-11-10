@@ -5,6 +5,7 @@ dist-ssr
 data
 backups
 _release
+_publish
 *.log
 .env
 .env.*
