@@ -293,12 +293,13 @@ t("health 返回健康状态与状态码计数", async () => {
 /* ---------------- 无状态签名会话 ---------------- */const SIGNED_SECRET = "test-signing-secret-32-bytes-long"
 
 function payload(over: Partial<SessionPayload> = {}): SessionPayload {
+  const now = Date.now()
   return {
     openId: ADMIN_OPEN_ID,
     name: "HugoW",
     avatarUrl: "",
-    createdAt: 1000,
-    expiresAt: 1000 + TTL,
+    createdAt: now,
+    expiresAt: now + TTL,
     ...over,
   }
 }

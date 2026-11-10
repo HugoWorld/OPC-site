@@ -27,7 +27,7 @@ import {
 import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { AdminLoginGate, loadSession, shortOpenId, signOut } from "@/site/admin/auth"
+import { AdminLoginGate, fetchSession, loadSession, shortOpenId, signOutRemote } from "@/site/admin/auth"
 import { BITABLE_TABLES, bitableReady } from "@/site/admin/bitable"
 import {
   ACCENT2_PRESETS,
@@ -318,7 +318,7 @@ function SliceEditor<K extends SliceKey>({
   desc?: string
   onLocate?: (target: PreviewTarget) => void
 }) {
-  const { data, draft, setSlice, resetSlice, publishSlice, sliceHasDraftChange } = useSiteStore()
+  const { data, draft, setSlice, resetSlice, publishSlice, publishing, publishError, sliceHasDraftChange } = useSiteStore()
   const changed = sliceHasDraftChange(sliceKey)
   const value = data[sliceKey]
 
@@ -387,12 +387,13 @@ function SliceEditor<K extends SliceKey>({
                   variant="outline"
                   size="sm"
                   className="gap-1.5"
+                  disabled={publishing}
                   onClick={() => {
-                    if (window.confirm(PUBLISH_CONFIRM_TEXT)) publishSlice(sliceKey)
+                    if (window.confirm(PUBLISH_CONFIRM_TEXT)) void publishSlice(sliceKey)
                   }}
                 >
                   <Check className="size-3.5" />
-                  发布本模块
+                  {publishing ? "发布中…" : "发布本模块"}
                 </Button>
               </>
             )}
@@ -417,6 +418,11 @@ function SliceEditor<K extends SliceKey>({
             )}
           </div>
         </div>
+        {publishError ? (
+          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+            发布未完成：{publishError}
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5">
@@ -435,7 +441,7 @@ function SliceEditor<K extends SliceKey>({
 /* ---------------- 总览 ---------------- */
 
 function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
-  const { data, draft, hasDraftChanges, publishAll, lastPublishedAt, lastDraftSavedAt } = useSiteStore()
+  const { data, draft, hasDraftChanges, publishAll, publishing, publishError, lastPublishedAt, lastDraftSavedAt } = useSiteStore()
 
   const STAT_ICONS: Record<string, LucideIcon> = {
     solutions: Layers,
@@ -499,14 +505,18 @@ function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
             {hasDraftChanges && (
               <Button
                 className="gap-1.5"
+                disabled={publishing}
                 onClick={() => {
-                  if (window.confirm(PUBLISH_CONFIRM_TEXT)) publishAll()
+                  if (window.confirm(PUBLISH_CONFIRM_TEXT)) void publishAll()
                 }}
               >
                 <Rocket className="size-3.5" />
-                发布全部草稿到站点
+                {publishing ? "发布中…" : "发布全部草稿到站点"}
               </Button>
             )}
+            {publishError ? (
+              <span className="text-[11.5px] text-amber-700">发布失败：{publishError}</span>
+            ) : null}
             <Button asChild variant="outline" className="gap-1.5">
               <a href="#/" target="_blank" rel="noreferrer">
                 <ExternalLink className="size-3.5" />
@@ -953,7 +963,7 @@ function toYaml(v: unknown, indent = 0): string {
 }
 
 function Publish() {
-  const { data, published, hasDraftChanges, publishAll, resetSlice, resetPublished, lastPublishedAt } =
+  const { data, published, hasDraftChanges, publishAll, publishing, publishError, resetSlice, resetPublished, lastPublishedAt } =
     useSiteStore()
   const [notice, setNotice] = useState("")
 
@@ -1007,15 +1017,26 @@ function Publish() {
           </div>
           <Button
             className="gap-1.5"
-            disabled={!hasDraftChanges}
+            disabled={!hasDraftChanges || publishing}
             onClick={() => {
-              if (window.confirm(PUBLISH_CONFIRM_TEXT)) publishAll()
+              if (window.confirm(PUBLISH_CONFIRM_TEXT)) void publishAll()
             }}
           >
             <Rocket className="size-3.5" />
-            {hasDraftChanges ? "发布全部草稿" : lastPublishedAt ? "已是最新" : "没有可发布的改动"}
+            {publishing
+              ? "发布中…"
+              : hasDraftChanges
+                ? "发布全部草稿"
+                : lastPublishedAt
+                  ? "已是最新"
+                  : "没有可发布的改动"}
           </Button>
         </div>
+        {publishError ? (
+          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+            发布未完成：{publishError}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -1103,16 +1124,25 @@ function Publish() {
 
 export function AdminPage() {
   const [tab, setTab] = useState<TabKey>("overview")
-  const { hasDraftChanges, publishAll, lastDraftSavedAt } = useSiteStore()
+  const { hasDraftChanges, publishAll, publishing, lastDraftSavedAt } = useSiteStore()
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget>({ path: "/", anchor: "hero" })
-  // FR-AUTH：会话来自 localStorage（原型为模拟飞书账号）
-  const [user] = useState(() => loadSession())
-  // FR-BE：数据源说明面板（v1.1 契约已冻结，多维表格尚未接入）
+  // FR-AUTH：先用本地展示缓存即时拦截，再由 /api/auth/me 以 Cookie 为准刷新。
+  const [user, setUser] = useState(() => loadSession())
+  // FR-BE：数据源说明面板（真实飞书 + 本机快照）
   const [dataSourceOpen, setDataSourceOpen] = useState(false)
   const bitableOn = bitableReady()
   const onSignOut = useCallback(() => {
-    signOut()
-    window.location.hash = "#/login/"
+    void signOutRemote().finally(() => {
+      window.location.hash = "#/login/"
+    })
+  }, [])
+
+  useEffect(() => {
+    const ctrl = new AbortController()
+    void fetchSession(ctrl.signal).then((next) => {
+      if (!ctrl.signal.aborted) setUser(next)
+    })
+    return () => ctrl.abort()
   }, [])
 
   const onLocate = useCallback((target: PreviewTarget) => {
@@ -1261,7 +1291,7 @@ export function AdminPage() {
             </span>
             <span className="text-[14px] font-semibold">运营工作台</span>
             <span className="hidden text-[12px] text-muted-foreground sm:inline">
-              HugoW个人门户 · 原型
+              HugoW个人门户 · 飞书后端
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1273,7 +1303,7 @@ export function AdminPage() {
               className="hidden items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition-colors hover:bg-muted md:flex"
             >
               <Database className="size-3.5" />
-              {bitableOn ? "飞书多维表格" : "本机缓存"}
+              {bitableOn ? "飞书多维表格" : "飞书 · 本机快照"}
             </button>
             {/* 草稿自动保存状态 */}
             <span
@@ -1292,12 +1322,13 @@ export function AdminPage() {
               <Button
                 size="sm"
                 className="gap-1.5"
+                disabled={publishing}
                 onClick={() => {
-                  if (window.confirm(PUBLISH_CONFIRM_TEXT)) publishAll()
+                  if (window.confirm(PUBLISH_CONFIRM_TEXT)) void publishAll()
                 }}
               >
                 <Rocket className="size-3.5" />
-                发布全部
+                {publishing ? "发布中…" : "发布全部"}
               </Button>
             )}
             <OnboardingChip />

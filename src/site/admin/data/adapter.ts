@@ -1,11 +1,19 @@
 /* ------------------------------------------------------------------ */
 /* 数据适配器：把「读已发布 / 发布草稿」从具体存储中抽象出来。            */
-/* - LocalAdapter：现状实现，读写 localStorage，行为与原型一致；          */
-/* - MockAdapter ：内存实现，可注入失败，用于工作台与网关联调前的测试；    */
-/* - FeishuAdapter 待网关就位后按本接口实现，UI 与 Store 无需改动。       */
+/* - FeishuAdapter：生产实现，读网关快照、发布走 /api/publish；           */
+/* - LocalAdapter：本地回退，读写 localStorage；                         */
+/* - MockAdapter ：内存实现，可注入失败，用于工作台与网关联调前的测试。    */
 /* ------------------------------------------------------------------ */
 
+import type { SnapshotEnvelope } from "./snapshot"
 import type { EditableData } from "../store"
+
+/* 网关地址：与 auth.tsx 保持同一口径；在 Node 单测里 import.meta.env 不存在，
+ * 因此用可选链兜底，避免把整条脚本链拖进浏览器模块。 */
+const GATEWAY_BASE = import.meta.env?.VITE_GATEWAY_BASE ?? ""
+function apiUrl(path: string): string {
+  return `${GATEWAY_BASE}${path}`
+}
 
 export interface TableFailure {
   table: string
@@ -61,6 +69,72 @@ function parseOverrides(raw: string | null): Partial<EditableData> {
   } catch {
     return {}
   }
+}
+
+/* ---------------- 飞书 / 网关适配器 ---------------- */
+
+/**
+ * 生产数据适配器：
+ * - load：GET /api/snapshot/current，与访客站读取的 data/current.json 同源；
+ * - publish：POST /api/publish，由网关串行写 12 张表、切快照指针；
+ * - 401 抛「会话过期」，429 抛「发布过于频繁」，207 原样返回 partial。
+ */
+export class FeishuAdapter implements DataAdapter {
+  readonly id = "feishu"
+
+  async load(): Promise<LoadResult> {
+    const res = await fetch(apiUrl("/api/snapshot/current"), {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    })
+    if (!res.ok) throw new Error(`快照不可用（HTTP ${res.status}）`)
+    const envelope = (await res.json()) as SnapshotEnvelope
+    if (!envelope || typeof envelope.data !== "object" || envelope.data === null) {
+      throw new Error("快照格式不合法")
+    }
+    return {
+      overrides: envelope.data,
+      source: "snapshot",
+      version: envelope.version,
+      fetchedAt: Date.now(),
+    }
+  }
+
+  async publish(draft: Partial<EditableData>): Promise<PublishResult> {
+    const res = await fetch(apiUrl("/api/publish"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ draft }),
+    })
+    if (res.status === 401) throw new Error("登录已过期，请重新登录")
+    if (res.status === 429) throw new Error("发布过于频繁，请稍后再试")
+    const payload = (await res.json().catch(() => null)) as
+      | PublishResult
+      | { error?: { code?: string; message?: string } }
+      | null
+    if (!payload) throw new Error(`发布响应无法解析（HTTP ${res.status}）`)
+    if (res.ok || res.status === 207) return payload as PublishResult
+    throw new Error(
+      ("error" in payload && payload.error?.message) || `发布失败（HTTP ${res.status}）`,
+    )
+  }
+}
+
+/**
+ * 按环境选择适配器：默认 feishu；VITE_DATA_ADAPTER=local 时退回 localStorage，
+ * 便于纯静态预览与离线演示。UI 与 Store 只依赖 DataAdapter 接口。
+ */
+export function createDataAdapter(): DataAdapter {
+  const kind = import.meta.env?.VITE_DATA_ADAPTER
+  if (kind === "local" && typeof localStorage !== "undefined") {
+    return new LocalAdapter({
+      draftKey: "hugow-admin-draft-v1",
+      publishedKey: "hugow-admin-published-v1",
+      storage: localStorage,
+    })
+  }
+  return new FeishuAdapter()
 }
 
 /* ---------------- 本地适配器 ---------------- */

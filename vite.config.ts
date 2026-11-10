@@ -24,6 +24,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: true,
+      // 本地联调：浏览器只认 5173，/api 由 Vite 反代到本机网关，Cookie 同源。
+      proxy: {
+        "/api": {
+          target: "http://127.0.0.1:8787",
+          changeOrigin: false,
+        },
+      },
     },
     build: {
       outDir: admin ? "dist-admin" : "dist",

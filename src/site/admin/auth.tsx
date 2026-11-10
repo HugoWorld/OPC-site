@@ -1,25 +1,21 @@
 /* ------------------------------------------------------------------ */
 /* 运营管理员登录态（FR-AUTH）                                          */
 /*                                                                     */
-/* 原型阶段（当前）：模拟飞书登录 —— 点击一次即写入占位会话，            */
-/* 头像 / 姓名 / open_id 均为占位值，用于打通登录页、拦截、登出与用户区。 */
+/* 真实链路：登录页 → /api/auth/start → 飞书授权页 → /api/auth/callback   */
+/* → 网关校验 open_id 白名单 → Set-Cookie(HttpOnly) → 回工作台。          */
 /*                                                                     */
-/* 真实阶段（待凭据到位）：                                               */
-/*   1. 跳转飞书授权页（网页应用授权码模式），回跳地址须在应用后台加白；   */
-/*   2. 用授权码换取 user_access_token；                                  */
-/*   3. 调飞书接口取用户信息：avatar_url / name / open_id / union_id；    */
-/*   4. 校验 open_id 命中管理员白名单后，才写入会话并放行工作台。          */
-/* 敏感项（app_secret、access_token）不得落在前端或 localStorage。        */
+/* 前端不接触 app_secret / user_access_token；localStorage 只缓存展示用  */
+/* 的姓名、头像、open_id 尾号，真实鉴权以 HttpOnly Cookie 为准。          */
 /* ------------------------------------------------------------------ */
 
 export interface AdminUser {
-  /** 飞书用户名（真实阶段取 user_info.name） */
+  /** 飞书用户名（user_info.name） */
   name: string
-  /** 头像直链（真实阶段取 user_info.avatar_url；空则前台用首字占位） */
+  /** 头像直链（user_info.avatar_url；空则首字占位） */
   avatarUrl: string
-  /** 飞书 open_id（真实阶段取 user_info.open_id，用于白名单校验与审计） */
+  /** 展示用身份标识：完整 open_id 或「…尾号」。真实白名单在网关侧校验。 */
   openId: string
-  /** 登录来源：mock = 原型占位，feishu = 真实飞书授权 */
+  /** 登录来源：feishu = 真实飞书授权；mock 仅为历史缓存兼容 */
   source: "mock" | "feishu"
   /** 登录时间戳（毫秒） */
   loginAt: number
@@ -28,16 +24,28 @@ export interface AdminUser {
 /** 会话键（与草稿/已发布数据分开，登出只清会话不动内容） */
 export const SESSION_KEY = "hugow-admin-session-v1"
 
-/** 会话有效期：真实阶段按飞书 token 生命周期；原型阶段给 12 小时，过期需重新登录 */
+/** 本地缓存有效期 12 小时；真正的过期由网关会话 expiresAt 决定 */
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000
 
-/** 原型占位账号：字段结构与真实飞书用户一致，便于将来只替换数据来源 */
+/** 兼容旧代码的占位常量；登录入口已不再使用模拟账号。 */
 export const MOCK_USER: AdminUser = {
   name: "HugoW",
   avatarUrl: "",
   openId: "ou_mock_7f3c9a1b2d4e5f60",
   source: "mock",
   loginAt: 0,
+}
+
+/**
+ * 网关前缀。默认 /api，由 Vite 代理或 Nginx 反代到 127.0.0.1:8787。
+ * 本地直连可设 VITE_GATEWAY_BASE=http://127.0.0.1:8787（需网关 CORS）。
+ */
+export const GATEWAY_BASE = (
+  (import.meta.env?.VITE_GATEWAY_BASE as string | undefined) ?? ""
+).replace(/\/$/, "")
+
+export function apiUrl(path: string): string {
+  return `${GATEWAY_BASE}${path.startsWith("/") ? path : `/${path}`}`
 }
 
 export function loadSession(): AdminUser | null {
@@ -48,7 +56,6 @@ export function loadSession(): AdminUser | null {
     if (!u || typeof u !== "object") return null
     if (typeof u.openId !== "string" || typeof u.name !== "string") return null
     if (typeof u.loginAt !== "number") return null
-    // 过期即视为未登录（不自动续期，避免静默长期持有管理权限）
     if (Date.now() - u.loginAt > SESSION_TTL_MS) return null
     return {
       name: u.name,
@@ -62,24 +69,17 @@ export function loadSession(): AdminUser | null {
   }
 }
 
-/** 原型模拟登录：写入占位会话并返回该用户 */
-export function signInMock(): AdminUser {
-  const user: AdminUser = { ...MOCK_USER, loginAt: Date.now() }
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user))
-  } catch {
-    /* 隐私模式等场景下仅本次调用的返回对象生效 */
-  }
-  return user
-}
-
-/** 真实阶段使用：用飞书返回的用户信息写入会话 */
-export function signInFeishu(info: { name: string; avatarUrl: string; openId: string }): AdminUser {
+/** 用网关 /api/auth/me 的用户信息写入本地展示缓存。 */
+export function signInFeishu(info: {
+  name: string
+  avatarUrl: string
+  openId: string
+}): AdminUser {
   const user: AdminUser = { ...info, source: "feishu", loginAt: Date.now() }
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify(user))
   } catch {
-    /* 同上 */
+    /* 隐私模式等场景下仅本次调用的返回对象生效 */
   }
   return user
 }
@@ -92,14 +92,73 @@ export function signOut() {
   }
 }
 
-/** open_id 不完整展示，界面上只露尾号（避免把标识整串贴到截图里） */
-export function shortOpenId(openId?: string) {
-  if (!openId) return "未登录"
-  const tail = openId.slice(-4)
-  return `…${tail}`
+interface MeResponse {
+  name: string
+  avatarUrl: string
+  openIdSuffix?: string
+  source?: string
 }
 
-/** 未登录时的拦截卡：工作台不渲染任何编辑界面 */
+/**
+ * 以 Cookie 为准刷新登录态：命中返回用户并写缓存，401/403 清缓存返回 null。
+ * AdminPage 挂载时调用，避免「本地有缓存但服务端会话已过期」的假登录。
+ */
+export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | null> {
+  try {
+    const res = await fetch(apiUrl("/api/auth/me"), {
+      credentials: "include",
+      signal,
+      headers: { accept: "application/json" },
+    })
+    if (!res.ok) {
+      signOut()
+      return null
+    }
+    const data = (await res.json()) as MeResponse
+    if (!data || typeof data.name !== "string") {
+      signOut()
+      return null
+    }
+    return signInFeishu({
+      name: data.name,
+      avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : "",
+      openId: typeof data.openIdSuffix === "string" ? data.openIdSuffix : "…",
+    })
+  } catch {
+    // 网关不可达时保留缓存，避免断网把用户直接踢出编辑界面。
+    return loadSession()
+  }
+}
+
+/** 跳飞书授权页；next 是回工作台后的 hash 路径，如 /admin/。 */
+export function startFeishuLogin(next = "/admin/") {
+  const target = apiUrl(`/api/auth/start?next=${encodeURIComponent(next)}`)
+  window.location.assign(target)
+}
+
+/** 通知服务端撤销会话（清 HttpOnly Cookie），再清本地展示缓存。 */
+export async function signOutRemote(): Promise<void> {
+  try {
+    await fetch(apiUrl("/api/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+      headers: { accept: "application/json" },
+    })
+  } catch {
+    /* 网关不可达也继续清本地，避免卡在退出页 */
+  } finally {
+    signOut()
+  }
+}
+
+/** open_id 不完整展示，界面上只露尾号（避免把标识整串贴到截图里）。 */
+export function shortOpenId(openId?: string) {
+  if (!openId) return "未登录"
+  if (openId.startsWith("…")) return openId
+  return `…${openId.slice(-4)}`
+}
+
+/** 未登录时的拦截卡：工作台不渲染任何编辑界面。 */
 export function AdminLoginGate() {
   return (
     <div className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
@@ -109,8 +168,8 @@ export function AdminLoginGate() {
         </span>
         <h1 className="mt-4 text-[18px] font-semibold">运营工作台需要登录</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          工作台仅对管理员开放，使用飞书账号登录后进入。原型阶段为模拟登录：
-          头像、姓名与 open_id 均为占位值，真实接入后取自飞书用户信息并按 open_id 白名单校验。
+          工作台仅对管理员开放。使用飞书账号登录后，网关会校验 open_id 白名单并下发
+          HttpOnly 会话 Cookie；未登录时不会加载任何编辑数据。
         </p>
         <a
           href="#/login/?next=/admin/"

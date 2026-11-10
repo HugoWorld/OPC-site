@@ -1,23 +1,38 @@
+/* ------------------------------------------------------------------ */
+/* 运营工作台登录页：跳转飞书网页授权，不再提供模拟登录。                 */
+/* ------------------------------------------------------------------ */
+
 import { Link } from "react-router-dom"
 
-import { MOCK_USER, shortOpenId, signInMock } from "@/site/admin/auth"
+import { startFeishuLogin } from "@/site/admin/auth"
+
+function readLoginQuery(): { next: string; error: string } {
+  const raw = window.location.hash.replace(/^#/, "")
+  const qs = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : ""
+  const params = new URLSearchParams(qs)
+  const next = params.get("next")
+  return {
+    next: next && next.startsWith("/") && !next.startsWith("//") ? next : "/admin/",
+    error: params.get("error") ?? "",
+  }
+}
+
+const ERROR_TEXT: Record<string, string> = {
+  access_denied: "你在飞书授权页取消了授权，未进入工作台。",
+  state_mismatch: "登录校验失败（state 不匹配），请重新发起登录。",
+  missing_code: "飞书没有返回授权码，请重新登录。",
+  not_allowed: "该飞书账号不在管理员白名单，请联系站点所有者添加。",
+  rate_limited: "登录尝试过于频繁，请稍后再试。",
+  upstream: "飞书授权服务暂时不可用，请稍后重试。",
+  oauth_config: "网关尚未配置飞书应用凭据，请先完成部署配置。",
+}
 
 /**
- * 运营工作台登录页（FR-AUTH）。
- *
- * 原型阶段：模拟飞书登录 —— 点击后写入占位会话（头像 / 姓名 / open_id 均为占位值），
- * 然后回到 next 指定的工作台地址。真实接入时本页只保留「跳转飞书授权」这一步，
- * 其余展示字段与真实 user_info 一一对应，无需改版。
+ * 真实登录：点击后跳到网关 /api/auth/start，由网关构造飞书授权页地址。
+ * 授权成功回跳 /api/auth/callback，网关校验 open_id 白名单后下发 HttpOnly Cookie。
  */
 export function LoginPage() {
-  const onLogin = () => {
-    signInMock()
-    // HashRouter 下查询串在 hash 内：#/login/?next=/admin/
-    const raw = window.location.hash.replace(/^#/, "")
-    const qs = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : ""
-    const next = new URLSearchParams(qs).get("next") || "/admin/"
-    window.location.hash = "#" + (next.startsWith("/") ? next : "/admin/")
-  }
+  const { next, error } = readLoginQuery()
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -39,14 +54,15 @@ export function LoginPage() {
             登录运营工作台
           </h1>
           <p className="mt-3 max-w-[42ch] text-[14px] leading-relaxed text-muted-foreground">
-            站点内容与外观的统一编辑入口。工作台仅对管理员开放，使用飞书账号登录，不再单独维护一套账号密码。
+            站点内容与外观的统一编辑入口。工作台仅对管理员开放，使用飞书账号登录，
+            不再单独维护一套账号密码。
           </p>
 
           <ul className="mt-7 space-y-2.5 text-[13px] text-muted-foreground">
             {[
               "头像、姓名取自飞书用户信息，不用另传",
-              "open_id 用于管理员白名单校验与操作留痕",
-              "登录与草稿数据分开存放，退出登录不影响已写内容",
+              "open_id 由网关校验管理员白名单，不落在前端",
+              "会话走 HttpOnly Cookie，退出登录立即撤销",
             ].map((t) => (
               <li key={t} className="flex items-start gap-2.5">
                 <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
@@ -60,14 +76,20 @@ export function LoginPage() {
         <div className="glass-card rounded-2xl p-6 sm:p-7">
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-semibold">管理员登录</span>
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700">
-              原型 · 模拟登录
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+              飞书授权登录
             </span>
           </div>
 
+          {error ? (
+            <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800">
+              {ERROR_TEXT[error] ?? `登录未完成（${error}），请重试。`}
+            </p>
+          ) : null}
+
           <button
             type="button"
-            onClick={onLogin}
+            onClick={() => startFeishuLogin(next)}
             className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#3370ff] text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
           >
             <span className="grid size-5 place-items-center rounded bg-white/15 text-[11px] font-bold">飞</span>
@@ -75,8 +97,12 @@ export function LoginPage() {
           </button>
 
           <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-            点击后以占位账号进入工作台：姓名「{MOCK_USER.name}」、open_id「{shortOpenId(MOCK_USER.openId)}」。
-            正式环境会跳转飞书授权页，由飞书返回真实头像与身份。
+            点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；
+            授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的
+            <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground/80">
+              ADMIN_OPEN_IDS
+            </code>
+            白名单。
           </p>
 
           <div className="mt-6 rounded-xl border border-border bg-muted/40 p-4">
@@ -86,7 +112,7 @@ export function LoginPage() {
                 ["头像", "avatar_url"],
                 ["姓名", "name"],
                 ["身份标识", "open_id"],
-                ["所属部门（可选）", "department_ids"],
+                ["会话", "HttpOnly Cookie"],
               ].map(([label, field]) => (
                 <div key={field} className="flex items-center justify-between gap-3">
                   <span>{label}</span>
@@ -102,7 +128,7 @@ export function LoginPage() {
             <Link to="/" className="text-muted-foreground hover:text-foreground">
               返回站点前台
             </Link>
-            <span className="text-muted-foreground">数据源：本地浏览器（待接飞书多维表格）</span>
+            <span className="text-muted-foreground">数据源：飞书多维表格 + 本机快照</span>
           </div>
         </div>
       </div>

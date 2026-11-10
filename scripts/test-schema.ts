@@ -19,6 +19,11 @@ import {
   MockAdapter,
   type StorageLike,
 } from "../src/site/admin/data/adapter.ts"
+import {
+  FEISHU_TABLE_IDS,
+  TABLE_SPECS,
+  TABLE_SPEC_LIST,
+} from "../src/site/admin/data/table-specs.ts"
 import { readSnapshot } from "../src/site/admin/data/snapshot.ts"
 import { SOLUTIONS } from "../src/site/data/solutions.ts"
 
@@ -118,6 +123,30 @@ check("真实 SOLUTIONS 解码往返字段一致", () => {
     assert.equal(b.demo.status, s.demo.status)
     assert.equal(b.demo.duration, s.demo.duration)
   })
+})
+
+/* ---------- 12 表字段契约 ---------- */
+
+check("12 张表契约齐全，字段总数 114", () => {
+  assert.equal(TABLE_SPEC_LIST.length, 12)
+  const total = TABLE_SPEC_LIST.reduce((n, spec) => n + spec.fields.length, 0)
+  assert.equal(total, 114)
+})
+
+check("每张表都有实测 table_id，且字段名不重复", () => {
+  for (const spec of TABLE_SPEC_LIST) {
+    assert.ok(FEISHU_TABLE_IDS[spec.table], `${spec.table} 缺 table_id`)
+    const names = spec.fields.map((f) => f.name)
+    assert.equal(new Set(names).size, names.length, `${spec.table} 字段名重复`)
+  }
+})
+
+check("单行表用稳定主键，审计表用 seq", () => {
+  assert.equal(TABLE_SPECS.site_config.primaryKey, "brandName")
+  assert.equal(TABLE_SPECS.method_faq.primaryKey, "id")
+  assert.equal(TABLE_SPECS.about.primaryKey, "id")
+  assert.equal(TABLE_SPECS.theme.primaryKey, "id")
+  assert.equal(TABLE_SPECS.audit_log.primaryKey, "seq")
 })
 
 /* ---------- 适配器 ---------- */

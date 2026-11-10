@@ -34,7 +34,8 @@ export interface VersionPointerStore {
   /**
    * 当 current 仍等于 expected 时把指针写到 next。
    * 返回 true 表示切换成功；false 表示期间已被别人改过。
-   * 真实实现应使用对象存储的条件写（如 OSS `x-oss-forbid-overwrite`）。
+   * 真实实现应使用本机文件锁（独占创建 + 原子 rename），或对象存储的
+   * 条件写；本项目的单机实现见 local-snapshot.ts。
    */
   compareAndSwap(expected: string | null, next: string): Promise<boolean>
 }

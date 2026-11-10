@@ -4,12 +4,13 @@
 /* 解决的问题：云函数多实例 / 冷启动时，进程内会话会丢；签名会话把状态   */
 /* 放在 Cookie 自身，任何实例都能验签，网关可水平扩容。                  */
 /*                                                                    */
-/* 取舍：签名会话无法在服务端单点撤销。退出登录清除浏览器 Cookie，       */
-/* 已泄露的旧 Cookie 在 TTL 内仍有效；因此 TTL 不宜过长（默认 12h），    */
-/* 敏感操作（发布）每次都重新校验签名与白名单。                          */
+/* 取舍：签名会话不落库；本实现额外维护有界撤销表，退出登录时把该 sid   */
+/* 拉黑到 expiresAt，单实例内可立即失效。多实例部署仍需共享撤销表（如   */
+/* Redis）才能跨实例撤签；因此 TTL 不宜过长（默认 12h），敏感操作（发布） */
+/* 每次都重新校验签名与白名单。                                          */
 /* ------------------------------------------------------------------ */
 
-import type { SessionPayload, SessionStore } from "./gateway"
+import type { SessionPayload, SessionStore } from "./gateway.ts"
 
 const encoder = new TextEncoder()
 
@@ -60,6 +61,15 @@ function isPayload(v: unknown): v is SessionPayload {
   )
 }
 
+function decodeBody(body: string): SessionPayload | null {
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(fromBase64Url(body))) as unknown
+    return isPayload(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export interface SignedSessionOptions {
   /** 签名密钥，至少 16 字符；由网关环境变量注入，不进前端。 */
   secret: string
@@ -70,6 +80,15 @@ export function createSignedSessionStore(opts: SignedSessionOptions): SessionSto
     throw new Error("会话签名密钥至少需要 16 个字符")
   }
   const secret = opts.secret
+  /** sid -> 撤销截止时间（毫秒）。只在单实例内有效，按 TTL 自动清理。 */
+  const revoked = new Map<string, number>()
+
+  function sweepRevoked(now: number): void {
+    if (revoked.size === 0) return
+    for (const [sid, until] of revoked) {
+      if (until <= now) revoked.delete(sid)
+    }
+  }
 
   return {
     async create(payload: SessionPayload): Promise<string> {
@@ -79,6 +98,10 @@ export function createSignedSessionStore(opts: SignedSessionOptions): SessionSto
     },
 
     async get(sid: string): Promise<SessionPayload | null> {
+      const now = Date.now()
+      sweepRevoked(now)
+      if (revoked.has(sid)) return null
+
       const dot = sid.indexOf(".")
       if (dot <= 0) return null
       const body = sid.slice(0, dot)
@@ -88,19 +111,19 @@ export function createSignedSessionStore(opts: SignedSessionOptions): SessionSto
       const expected = await sign(secret, body)
       if (!equalConstantTime(signature, expected)) return null
 
-      try {
-        const parsed = JSON.parse(
-          new TextDecoder().decode(fromBase64Url(body)),
-        ) as unknown
-        return isPayload(parsed) ? parsed : null
-      } catch {
-        return null
-      }
+      const parsed = decodeBody(body)
+      if (!parsed || parsed.expiresAt <= now) return null
+      return parsed
     },
 
-    /** 无状态会话没有服务端记录，登出由网关清除 Cookie 完成。 */
-    async destroy(): Promise<void> {
-      /* no-op */
+    /** 退出登录：把 sid 拉黑到其自身 expiresAt，单实例内立即失效。 */
+    async destroy(sid: string): Promise<void> {
+      const dot = sid.indexOf(".")
+      if (dot <= 0) return
+      const payload = decodeBody(sid.slice(0, dot))
+      if (!payload) return
+      revoked.set(sid, payload.expiresAt)
+      sweepRevoked(Date.now())
     },
   }
 }

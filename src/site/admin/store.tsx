@@ -1,5 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
+import { apiUrl } from "@/site/admin/auth"
+import type { PublishResult } from "@/site/admin/data/adapter"
+import { readSnapshot } from "@/site/admin/data/snapshot"
+
 import { AUDIENCES, DEMOS, DEMO_VIDEOS, HERO, HOME_SECTIONS, PRODUCT_CAROUSEL, STATS, TESTIMONIALS, VALUE_PROPS, type DemoVideo } from "@/site/data/home"
 import { METHOD, FAQ_GROUPS } from "@/site/data/method"
 import { SOLUTIONS, type Solution } from "@/site/data/solutions"
@@ -232,10 +236,14 @@ export interface SiteStore {
   setSlices: (patches: Partial<EditableData>) => void
   /** 重置某切片到默认值（写草稿层，传 undefined 重置全部草稿） */
   resetSlice: (key?: SliceKey) => void
-  /** 发布全部：草稿 → 已发布（站点前台即生效） */
-  publishAll: () => void
-  /** 发布单个切片：该切片的草稿 → 已发布 */
-  publishSlice: (key: SliceKey) => void
+  /** 发布全部：草稿 → 网关 12 表 + 本机快照（异步，失败不切换线上） */
+  publishAll: () => Promise<void>
+  /** 发布单个切片：合并「已发布 + 该切片草稿」后整体发布 */
+  publishSlice: (key: SliceKey) => Promise<void>
+  /** 正在发布（按钮禁用 / 文案反馈） */
+  publishing: boolean
+  /** 最近一次发布的失败原因（成功时清空） */
+  publishError: string | null
   /** 重置已发布层 */
   resetPublished: () => void
   /** 是否有未发布的草稿改动 */
@@ -263,6 +271,8 @@ export function SiteStoreProvider({
   const [draft, setDraft] = useState<Partial<EditableData>>(() => load(DRAFT_KEY))
   const [lastDraftSavedAt, setLastDraftSavedAt] = useState<number | null>(null)
   const [lastPublishedAt, setLastPublishedAt] = useState<number | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(null)
 
   const active = scope === "draft" ? draft : published
   const data = useMemo(() => mergeData(active), [active])
@@ -279,6 +289,24 @@ export function SiteStoreProvider({
     }
     window.addEventListener("storage", onStorage)
     return () => window.removeEventListener("storage", onStorage)
+  }, [scope])
+
+  // 访客站以发布快照为准：读取 ./data/current.json → 版本文件；失败回落本地缓存。
+  // 快照由 Nginx 静态托管（www 与 admin 共用同一数据目录），不依赖管理台 Cookie。
+  useEffect(() => {
+    if (scope !== "published") return
+    const ctrl = new AbortController()
+    void (async () => {
+      const envelope = await readSnapshot({
+        fetchImpl: (input, init) =>
+          fetch(input, { ...init, signal: ctrl.signal }),
+      })
+      if (ctrl.signal.aborted || !envelope) return
+      setPublished(envelope.data)
+      persist(PUBLISHED_KEY, envelope.data)
+      if (typeof envelope.generatedAt === "number") setLastPublishedAt(envelope.generatedAt)
+    })()
+    return () => ctrl.abort()
   }, [scope])
 
   // 主题应用：覆盖 CSS 变量（工作台自身也跟随草稿主题，预览与前台跟随各自作用域）
@@ -309,6 +337,56 @@ export function SiteStoreProvider({
       setLastDraftSavedAt(Date.now())
       persist(DRAFT_KEY, next)
     }
+
+    const postPublish = async (nextDraft: Partial<EditableData>, success: () => void) => {
+      setPublishing(true)
+      setPublishError(null)
+      try {
+        const res = await fetch(apiUrl("/api/publish"), {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ draft: nextDraft }),
+        })
+        const result = (await res.json().catch(() => null)) as
+          | PublishResult
+          | { error?: { code?: string; message?: string } }
+          | null
+
+        if (res.status === 401) {
+          setPublishError("登录已过期，请重新登录后再发布。")
+          return
+        }
+        if (res.status === 429) {
+          setPublishError("发布过于频繁（每账号 3 次/分钟），请稍后再试。")
+          return
+        }
+        if (res.ok) {
+          success()
+          setLastPublishedAt(Date.now())
+          return
+        }
+        if (res.status === 207 && result && "failedTables" in result) {
+          const failed = result.failedTables ?? []
+          setPublishError(
+            `部分表写入失败，线上快照未切换：${failed
+              .map((f) => `${f.table}（${f.code}）`)
+              .join("、")}`,
+          )
+          return
+        }
+        const message =
+          result && "error" in result && result.error?.message
+            ? result.error.message
+            : `发布失败（HTTP ${res.status}）`
+        setPublishError(message)
+      } catch {
+        setPublishError("网关不可达或网络中断，发布未完成。")
+      } finally {
+        setPublishing(false)
+      }
+    }
+
     return {
       data,
       draft,
@@ -322,11 +400,10 @@ export function SiteStoreProvider({
         delete next[key]
         persistDraft(next)
       },
-      publishAll: () => {
+      publishAll: () => postPublish(draft, () => {
         persist(PUBLISHED_KEY, draft)
         setPublished({ ...draft })
-        setLastPublishedAt(Date.now())
-      },
+      }),
       publishSlice: (key) => {
         const next: Record<string, unknown> = { ...published }
         const draftVal = draft[key]
@@ -335,20 +412,23 @@ export function SiteStoreProvider({
         } else {
           next[key] = draftVal
         }
-        persist(PUBLISHED_KEY, next)
-        setPublished(next as Partial<EditableData>)
-        setLastPublishedAt(Date.now())
+        return postPublish(next as Partial<EditableData>, () => {
+          persist(PUBLISHED_KEY, next)
+          setPublished(next as Partial<EditableData>)
+        })
       },
       resetPublished: () => {
         localStorage.removeItem(PUBLISHED_KEY)
         setPublished({})
       },
+      publishing,
+      publishError,
       hasDraftChanges,
       sliceHasDraftChange,
       lastDraftSavedAt,
       lastPublishedAt,
     }
-  }, [data, draft, published, scope, hasDraftChanges, lastDraftSavedAt, lastPublishedAt])
+  }, [data, draft, published, scope, publishing, publishError, hasDraftChanges, lastDraftSavedAt, lastPublishedAt])
 
   return <SiteStoreContext.Provider value={store}>{children}</SiteStoreContext.Provider>
 }

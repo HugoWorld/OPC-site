@@ -1,11 +1,11 @@
 /* ------------------------------------------------------------------ */
 /* 受控网关：平台无关的请求处理。                                        */
 /* 云函数入口只需把平台事件转成 GatewayRequest、把 GatewayResponse 写回。 */
-/* 全部依赖通过接口注入，本地用 mock 实现即可完整测试，不依赖真实凭据。   */
+/* 本机入口见 main.ts；全部依赖通过接口注入，本地用 mock 实现即可测。     */
 /* ------------------------------------------------------------------ */
 
-import type { PublishResult } from "../site/admin/data/adapter"
-import type { SnapshotEnvelope } from "../site/admin/data/snapshot"
+import type { PublishResult } from "../site/admin/data/adapter.ts"
+import type { SnapshotEnvelope } from "../site/admin/data/snapshot.ts"
 import {
   createMemoryRateLimiter,
   type RateLimiter,
@@ -47,6 +47,13 @@ export interface SnapshotService {
   current(): Promise<SnapshotEnvelope>
 }
 
+export interface GatewayOAuth {
+  /** 与飞书后台登记一致的回调地址 */
+  redirectUri: string
+  /** 构造飞书授权页地址（注入实现，网关不依赖具体域名常量） */
+  authorizeUrl: (state: string, redirectUri: string) => string
+}
+
 export interface GatewayDeps {
   feishu: FeishuClient
   sessions: SessionStore
@@ -54,6 +61,14 @@ export interface GatewayDeps {
   snapshots: SnapshotService
   adminOpenIds: readonly string[]
   sessionTtlMs: number
+  /** 本地开发用 http 时置 false；默认 true，测试按 Secure 断言 */
+  secureCookies?: boolean
+  /** 不传则 /api/auth/start 返回 501，POST exchange 仍可独立使用 */
+  oauth?: GatewayOAuth
+  /** 生产为 https://admin.example.com；本地可为 http://127.0.0.1:5173 */
+  publicAdminOrigin?: string
+  /** 本地为 /admin.html；生产 admin 子域根路径为空 */
+  adminEntryPath?: string
   /** 限流实现；不传则用进程内固定窗口计数（单实例场景） */
   rateLimiter?: RateLimiter
   /** 按路由覆盖默认限流规则 */
@@ -97,6 +112,7 @@ function json(
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
+      "x-content-type-options": "nosniff",
       ...(extra ?? {}),
     },
     body: JSON.stringify(data),
@@ -137,11 +153,49 @@ function redirect(location: string, extra?: Record<string, string>): GatewayResp
   return { status: 302, headers: { location, ...(extra ?? {}) }, body: "" }
 }
 
-function sessionCookie(sid: string): string {
+function sessionCookie(sid: string, secure = true): string {
   return (
     `${SESSION_COOKIE}=${encodeURIComponent(sid)}; ` +
-    "HttpOnly; Secure; SameSite=Lax; Path=/"
+    `HttpOnly; ${secure ? "Secure; " : ""}SameSite=Lax; Path=/`
   )
+}
+
+const OAUTH_STATE_COOKIE = "oauth_state"
+
+function oauthStateCookie(state: string, secure = true): string {
+  return (
+    `${OAUTH_STATE_COOKIE}=${encodeURIComponent(state)}; ` +
+    `HttpOnly; ${secure ? "Secure; " : ""}SameSite=Lax; Path=/; Max-Age=600`
+  )
+}
+
+function adminPage(deps: GatewayDeps, hashPath: string): string {
+  const hash = hashPath.startsWith("#") ? hashPath.slice(1) : hashPath
+  const origin = deps.publicAdminOrigin ?? ""
+  const entry = origin ? (deps.adminEntryPath ?? "") : ""
+  // 未注入管理台 origin（单测 / 同域部署）时退回站点根路径。
+  return `${origin || "/"}${entry}#${hash}`
+}
+
+function safeNext(raw: string | null | undefined): string {
+  const next = raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/admin/"
+  return next.replace(/[\r\n]/g, "")
+}
+
+function encodeState(next: string): string {
+  const raw = JSON.stringify({ n: next, v: crypto.randomUUID() })
+  return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+}
+
+function decodeState(state: string): string {
+  try {
+    const padded = state.replace(/-/g, "+").replace(/_/g, "/")
+    const bin = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4))
+    const parsed = JSON.parse(bin) as { n?: unknown }
+    return typeof parsed.n === "string" ? safeNext(parsed.n) : "/admin/"
+  } catch {
+    return "/admin/"
+  }
 }
 
 function pathOf(url: string): string {
@@ -171,6 +225,11 @@ function parseBody(bodyText: string): Record<string, unknown> | null {
 
 function maskOpenId(openId: string): string {
   return openId.length <= 4 ? openId : `…${openId.slice(-4)}`
+}
+
+/** OAuth start 失败时回登录页（不泄露配置细节）。 */
+function backWithLogin(deps: GatewayDeps, code: string): GatewayResponse {
+  return redirect(adminPage(deps, `/login/?error=${encodeURIComponent(code)}`))
 }
 
 type AuthResult =
@@ -270,7 +329,7 @@ export function createGateway(deps: GatewayDeps) {
             openIdSuffix: maskOpenId(est.session.openId),
             expiresAt: est.session.expiresAt,
           },
-          { "set-cookie": sessionCookie(est.sid) },
+          { "set-cookie": sessionCookie(est.sid, deps.secureCookies ?? true) },
         )
       } catch (e) {
         // 上游错误细节只进服务端日志，响应体保持抽象文案（不回传飞书内部信息）。
@@ -283,10 +342,29 @@ export function createGateway(deps: GatewayDeps) {
      * 与 POST /api/auth/exchange 干同一件事，区别是浏览器导航语义：
      * 用 302 把浏览器送回工作台，会话经 Set-Cookie 下发；任何失败回登录页并带错误码。 */
     if (path === "/api/auth/callback" && method === "GET") {
-      const back = (err?: string, extra?: Record<string, string>) =>
-        redirect(err ? `/#/login/?error=${encodeURIComponent(err)}` : "/#/admin/", extra)
       const qIndex = req.url.indexOf("?")
       const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
+      const oauthState = parseCookies(req.headers)[OAUTH_STATE_COOKIE]
+      const stateParam = qs?.get("state")
+      const next = deps.oauth ? decodeState(stateParam ?? "") : "/admin/"
+      const back = (err?: string, extra?: Record<string, string>) =>
+        redirect(
+          adminPage(
+            deps,
+            err ? `/login/?error=${encodeURIComponent(err)}` : next,
+          ),
+          extra,
+        )
+
+      // 授权页被拒绝时飞书会带 error=access_denied 回跳，不交换 code。
+      const oauthError = qs?.get("error")
+      if (oauthError) return back(oauthError)
+
+      if (deps.oauth) {
+        if (!oauthState || !stateParam || oauthState !== stateParam) {
+          return back("state_mismatch")
+        }
+      }
       const code = qs?.get("code")
       if (!code) return back("missing_code")
       const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
@@ -295,10 +373,30 @@ export function createGateway(deps: GatewayDeps) {
         const { user } = await deps.feishu.exchangeCode(code)
         const est = await establishSession(deps, user)
         if (!est.ok) return back("not_allowed")
-        return back(undefined, { "set-cookie": sessionCookie(est.sid) })
+        return back(undefined, {
+          "set-cookie": sessionCookie(est.sid, deps.secureCookies ?? true),
+        })
       } catch (e) {
         console.error("[gateway] feishu callback failed:", e instanceof Error ? e.message : e)
         return back("upstream")
+      }
+    }
+
+    /* GET /api/auth/start：浏览器跳到飞书授权页，state 用签名前的随机值 + 回跳路径。 */
+    if (path === "/api/auth/start" && method === "GET") {
+      if (!deps.oauth) return error(501, "OAUTH_NOT_CONFIGURED", "未配置飞书 OAuth")
+      const qIndex = req.url.indexOf("?")
+      const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
+      const next = safeNext(qs?.get("next"))
+      const state = encodeState(next)
+      try {
+        const url = deps.oauth.authorizeUrl(state, deps.oauth.redirectUri)
+        return redirect(url, {
+          "set-cookie": oauthStateCookie(state, deps.secureCookies ?? true),
+        })
+      } catch (e) {
+        console.error("[gateway] oauth start failed:", e instanceof Error ? e.message : e)
+        return backWithLogin(deps, "oauth_config")
       }
     }
 
@@ -311,6 +409,7 @@ export function createGateway(deps: GatewayDeps) {
         avatarUrl: auth.session.avatarUrl,
         openIdSuffix: maskOpenId(auth.session.openId),
         expiresAt: auth.session.expiresAt,
+        source: "feishu",
       })
     }
 
@@ -323,7 +422,7 @@ export function createGateway(deps: GatewayDeps) {
         { ok: true },
         {
           "set-cookie":
-            `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
+            `${SESSION_COOKIE}=; HttpOnly; ${deps.secureCookies ?? true ? "Secure; " : ""}SameSite=Lax; Path=/; Max-Age=0`,
         },
       )
     }
@@ -340,10 +439,15 @@ export function createGateway(deps: GatewayDeps) {
       if (!body.draft || typeof body.draft !== "object") {
         return error(400, "BAD_REQUEST", "缺少 draft")
       }
-      const result = await publishLock("publish", () =>
-        deps.publisher.publish(body.draft, auth.session),
-      )
-      return json(result.status === "ok" ? 200 : 207, result)
+      try {
+        const result = await publishLock("publish", () =>
+          deps.publisher.publish(body.draft, auth.session),
+        )
+        return json(result.status === "ok" ? 200 : 207, result)
+      } catch (e) {
+        console.error("[gateway] publish failed:", e instanceof Error ? e.message : e)
+        return error(500, "PUBLISH_FAILED", "发布失败，请稍后重试或查看服务日志")
+      }
     }
 
     /* GET /api/snapshot/current */
@@ -353,6 +457,24 @@ export function createGateway(deps: GatewayDeps) {
       } catch {
         return error(404, "SNAP_MISSING", "当前快照不可用")
       }
+    }
+
+    /* GET /api/data/current：仅用于开发/排障，与 /api/snapshot/current 同源。 */
+    if (path === "/api/data/current" && method === "GET") {
+      try {
+        return json(200, await deps.snapshots.current())
+      } catch {
+        return error(404, "SNAP_MISSING", "当前快照不可用")
+      }
+    }
+
+    /* GET /api/setup：返回不含密钥的配置状态，给向导做“是否已接通”判断。 */
+    if (path === "/api/setup" && method === "GET") {
+      return json(200, {
+        oauthConfigured: Boolean(deps.oauth),
+        adminCount: deps.adminOpenIds.length,
+        secureCookies: deps.secureCookies ?? true,
+      })
     }
 
     return error(404, "NOT_FOUND", "未知端点")

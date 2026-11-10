@@ -12,6 +12,9 @@
 /*   3. `app_secret` 一律不进前端——换 token 由网关完成。                  */
 /* ------------------------------------------------------------------ */
 
+import { FEISHU_TABLE_IDS, TABLE_SPECS } from "./data/table-specs.ts"
+import type { TableSpec } from "./data/table-schema.ts"
+
 /** 接入状态：未接入 / 已接入 / 降级（部分表读失败） */
 export type BitableStatus = "not_connected" | "connected" | "degraded"
 
@@ -32,19 +35,29 @@ export interface BitableTableSpec {
  * 改这里必须同步改 PRD A.7，否则 TC-27 不通过。
  */
 export const BITABLE_TABLES: BitableTableSpec[] = [
-  { table: "site_config", primaryKey: "row（单行）", slices: ["site", "nav", "cta", "footerColumns", "footerBoundary", "footerAigc", "pageSettings", "contact"], label: "站点配置（导航为子表 site_nav）" },
-  { table: "home_blocks", primaryKey: "block.id", slices: ["hero", "stats", "valueProps", "audiences", "homeSections", "demos", "demoVideos", "productCarousel"], label: "首页区块" },
+  { table: "site_config", primaryKey: "brandName", slices: ["site", "nav", "cta", "footerColumns", "footerBoundary", "footerAigc", "pageSettings", "contact"], label: "站点配置（单行；无 site_nav 子表）" },
+  { table: "home_blocks", primaryKey: "id", slices: ["hero", "stats", "valueProps", "audiences", "homeSections", "demos", "demoVideos", "productCarousel"], label: "首页区块（8 行）" },
   { table: "solutions", primaryKey: "id", slices: ["solutions"], label: "方案" },
   { table: "articles", primaryKey: "slug", slices: ["articles"], label: "文章" },
   { table: "products", primaryKey: "id", slices: ["products"], label: "产品卡" },
   { table: "shares", primaryKey: "id", slices: ["shares"], label: "分享" },
   { table: "pages", primaryKey: "slug", slices: ["pages"], label: "自定义页面" },
-  { table: "method_faq", primaryKey: "id", slices: ["method", "faqGroups"], label: "方法 / 价格 / FAQ" },
-  { table: "about", primaryKey: "row（单行）", slices: ["about"], label: "关于我" },
-  { table: "theme", primaryKey: "row（单行）", slices: ["theme"], label: "主题取值" },
+  { table: "method_faq", primaryKey: "id", slices: ["method", "faqGroups"], label: "方法 / 价格 / FAQ（单行 id=method）" },
+  { table: "about", primaryKey: "id", slices: ["about"], label: "关于我（单行 id=about）" },
+  { table: "theme", primaryKey: "id", slices: ["theme"], label: "主题取值（单行 id=theme）" },
   { table: "samples_testimonials", primaryKey: "id", slices: ["samples", "testimonials"], label: "样例与证言" },
-  { table: "audit_log", primaryKey: "自增", slices: [], label: "审计（登录 / 发布）" },
+  { table: "audit_log", primaryKey: "seq", slices: [], label: "审计（登录 / 发布）" },
 ]
+
+/** 取某张表的字段契约；未登记返回 null，调用方必须报错而不是猜字段。 */
+export function tableSpecFor(table: string): TableSpec | null {
+  return TABLE_SPECS[table] ?? null
+}
+
+/** 取某张表的实测 table_id；未登记返回 null。 */
+export function tableIdFor(table: string): string | null {
+  return FEISHU_TABLE_IDS[table] ?? null
+}
 
 /** 接入所需的运行时配置；空字符串 = 未配置（对应 PRD §6 O-8 / O-9） */
 export const BITABLE_ENV: {
