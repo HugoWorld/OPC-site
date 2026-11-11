@@ -36,7 +36,14 @@ export function SetupChecklist() {
           <Button variant="outline" size="sm" onClick={ob.openWizard}>
             查看配置
           </Button>
-          <Button variant="ghost" size="sm" onClick={ob.reset}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (!window.confirm("重新配置会清空初始化向导的完成标记，需要从第 1 步重新检查；站点内容与发布不受影响。确定继续？")) return
+              ob.reset()
+            }}
+          >
             重新配置
           </Button>
         </div>

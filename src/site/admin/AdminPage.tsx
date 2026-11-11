@@ -153,8 +153,32 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [loaded, setLoaded] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
+  const [locateHint, setLocateHint] = useState("")
   const lastLocate = useRef("")
   const lastSrc = useRef("")
+  const hintTimer = useRef<number | undefined>(undefined)
+  const pendingHint = useRef(false)
+
+  const announce = useCallback((message: string) => {
+    setLocateHint(message)
+    window.clearTimeout(hintTimer.current)
+    hintTimer.current = window.setTimeout(() => setLocateHint(""), 2400)
+  }, [])
+
+  /* 直接在同源 iframe 内滚动 + 高亮，避免只发 postMessage 时
+   * 预览桥未挂载 / 首屏已在顶部导致用户看不到任何反馈。 */
+  const applyInFrame = useCallback((anchor?: string) => {
+    const doc = iframeRef.current?.contentDocument
+    if (!doc) return false
+    const el = anchor
+      ? (doc.querySelector<HTMLElement>(`[data-preview-anchor="${anchor}"]`) ?? doc.getElementById(anchor))
+      : doc.querySelector<HTMLElement>("[data-preview-anchor]")
+    if (!el) return false
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    el.classList.add("preview-flash")
+    window.setTimeout(() => el.classList.remove("preview-flash"), 2200)
+    return true
+  }, [])
 
   /* 预览必须加载「访客站」构建，而不是工作台构建。
    * 生产环境由 8081 的 Nginx 把 /preview/ 指到访客站 dist，
@@ -162,7 +186,7 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
   const previewSrc = `${window.location.origin}/preview/#${target.path}?preview=1`
 
   // target 变化（切换 tab / 展开某组）→ 导航 iframe 并定位高亮
-  const locate = useCallback(() => {
+  const locate = useCallback((feedback = false) => {
     const iframe = iframeRef.current
     if (!iframe?.contentWindow) return
     const anchor = target.groupAnchor ?? target.anchor
@@ -171,16 +195,19 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
       // 路由不同：导航，onLoad 后再定位
       lastSrc.current = previewSrc
       lastLocate.current = key
+      pendingHint.current = feedback
       iframe.src = previewSrc
       return
     }
     lastLocate.current = key
-    // 同路由：直接定位（iframe 已在该页）
+    // 同路由：直接定位（iframe 已在该页）；postMessage 兼容预览桥
+    const applied = applyInFrame(anchor)
     iframe.contentWindow.postMessage({ type: "locate", anchor, durationMs: 2200 }, "*")
-  }, [previewSrc, target])
+    if (feedback) announce(applied ? "已定位到当前编辑组" : "预览尚未加载完成，请稍后重试")
+  }, [previewSrc, target, applyInFrame, announce])
 
   useEffect(() => {
-    locate()
+    locate(false)
   }, [locate])
 
   // 路由加载完成后下发定位
@@ -188,12 +215,21 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
     setLoaded(true)
     const anchor = target.groupAnchor ?? target.anchor
     lastLocate.current = `${target.path}#${anchor ?? ""}`
+    const applied = applyInFrame(anchor)
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage({ type: "locate", anchor, durationMs: 2200 }, "*")
+    }
+    if (pendingHint.current) {
+      pendingHint.current = false
+      announce(applied ? "已定位到当前编辑组" : "预览尚未加载完成，请稍后重试")
     }
   }
 
   // 全屏平铺预览：Esc / 按钮均可缩回
+  useEffect(() => {
+    return () => window.clearTimeout(hintTimer.current)
+  }, [])
+
   useEffect(() => {
     if (!fullscreen) return
     const onKey = (e: KeyboardEvent) => {
@@ -242,7 +278,7 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
           </a>
           <button
             type="button"
-            onClick={locate}
+            onClick={() => locate(true)}
             className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
           >
             定位当前组
@@ -260,6 +296,17 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
         {!loaded && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center bg-background">
             <span className="text-[12.5px] text-muted-foreground">加载预览…</span>
+          </div>
+        )}
+        {locateHint && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-3"
+          >
+            <span className="rounded-full bg-foreground/85 px-3 py-1 text-[11px] font-medium text-background shadow-lg">
+              {locateHint}
+            </span>
           </div>
         )}
       </div>

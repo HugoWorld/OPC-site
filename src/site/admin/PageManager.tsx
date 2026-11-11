@@ -94,6 +94,7 @@ export function PageManager({ onLocate }: { onLocate?: (t: PreviewTarget) => voi
   }
 
   const removeBlock = (page: CustomPage, i: number) => {
+    if (!window.confirm("删除这个区块？该操作写入草稿，发布后前台不再展示。")) return
     const next = [...page.blocks]
     next.splice(i, 1)
     upsertPage({ ...page, blocks: next })
@@ -280,7 +281,10 @@ export function PageManager({ onLocate }: { onLocate?: (t: PreviewTarget) => voi
                       variant="outline"
                       size="sm"
                       className="gap-1.5"
-                      onClick={() => setSlice("theme", { ...data.theme, homePageSlug: editing.slug })}
+                      onClick={() => {
+                        if (!window.confirm(`把「${editing.title}」设为首页？该操作写入草稿，发布后首页将改为这个页面。`)) return
+                        setSlice("theme", { ...data.theme, homePageSlug: editing.slug })
+                      }}
                       title="发布后，首页 / 路由将渲染此页面区块"
                     >
                       <Globe className="size-3.5" />

@@ -344,6 +344,7 @@ export function GroupedEditor({
                       size="icon"
                       className="size-7 text-destructive"
                       onClick={() => {
+                        if (!window.confirm("删除这一项？该操作写入草稿，发布后前台不再展示。")) return
                         const next = [...(value as unknown[])]
                         next.splice(i, 1)
                         onChange(next)
@@ -615,6 +616,7 @@ function PrimitiveList({
               size="icon"
               className="size-7 shrink-0 text-destructive"
               onClick={() => {
+                if (!window.confirm("删除这一项？该操作写入草稿，发布后前台不再展示。")) return
                 const next = [...value]
                 next.splice(i, 1)
                 onChange(next)
