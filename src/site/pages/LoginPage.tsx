@@ -4,7 +4,6 @@
 /* ------------------------------------------------------------------ */
 
 import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
 import QRCode from "qrcode"
 
 import {
@@ -15,6 +14,7 @@ import {
   startDemoLogin,
   startFeishuLogin,
   startPasswordLogin,
+  visitorSiteUrl,
   type QrTicket,
 } from "@/site/admin/auth"
 
@@ -215,7 +215,7 @@ export function LoginPage() {
       <div className="mx-auto grid w-full max-w-[1000px] items-center gap-12 px-6 py-14 md:grid-cols-[1.02fr_0.98fr] md:py-20">
         {/* 左：品牌与说明 */}
         <div className="max-w-[440px]">
-          <Link to="/" className="inline-flex items-center gap-2.5">
+          <a href={visitorSiteUrl()} className="inline-flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-primary text-[13px] font-bold text-primary-foreground">
               H
             </span>
@@ -223,7 +223,7 @@ export function LoginPage() {
               <span className="block text-[15px] font-semibold leading-tight">HugoW</span>
               <span className="block text-[11.5px] text-muted-foreground">法律与咨询服务交付</span>
             </span>
-          </Link>
+          </a>
 
           <h1 className="mt-9 text-[clamp(1.75rem,3.6vw,2.5rem)] font-extrabold leading-[1.12] tracking-[-0.02em] text-balance">
             登录运营工作台
@@ -434,9 +434,9 @@ export function LoginPage() {
           ) : null}
 
           <div className="mt-6 flex items-center justify-between gap-2 border-t border-border pt-4 text-[12px]">
-            <Link to="/" className="text-muted-foreground hover:text-foreground">
+            <a href={visitorSiteUrl()} className="text-muted-foreground hover:text-foreground">
               返回站点前台
-            </Link>
+            </a>
             <span className="text-muted-foreground">仅限管理员访问</span>
           </div>
         </div>

@@ -26,7 +26,13 @@ import {
 import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { AdminLoginGate, fetchSession, loadSession, signOutRemote } from "@/site/admin/auth"
+import {
+  AdminLoginGate,
+  fetchSession,
+  signOutRemote,
+  visitorSiteUrl,
+  type AdminUser,
+} from "@/site/admin/auth"
 import {
   ACCENT2_PRESETS,
   ACCENT_PRESETS,
@@ -136,13 +142,6 @@ const GROUP_ANCHORS: Record<string, Record<string, string>> = {
 }
 
 /* ---------------- 右侧预览 iframe ---------------- */
-
-/** 访客站地址：工作台在 8081，访客站在同主机 8080。 */
-function visitorSiteUrl(): string {
-  const url = new URL(window.location.origin)
-  if (url.port === "8081") url.port = "8080"
-  return `${url.origin}/`
-}
 
 export interface PreviewTarget {
   path: string
@@ -1105,8 +1104,9 @@ export function AdminPage() {
   const [tab, setTab] = useState<TabKey>("overview")
   const { hasDraftChanges, publishAll, publishing, lastDraftSavedAt } = useSiteStore()
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget>({ path: "/", anchor: "hero" })
-  // FR-AUTH：先用本地展示缓存即时拦截，再由 /api/auth/me 以 Cookie 为准刷新。
-  const [user, setUser] = useState(() => loadSession())
+  // FR-AUTH：不以 localStorage 缓存直接放行，必须先由 /api/auth/me 按 Cookie 验证。
+  const [user, setUser] = useState<AdminUser | null>(null)
+  const [authReady, setAuthReady] = useState(false)
   const onSignOut = useCallback(() => {
     void signOutRemote().finally(() => {
       window.location.hash = "#/login/"
@@ -1115,10 +1115,27 @@ export function AdminPage() {
 
   useEffect(() => {
     const ctrl = new AbortController()
-    void fetchSession(ctrl.signal).then((next) => {
-      if (!ctrl.signal.aborted) setUser(next)
-    })
-    return () => ctrl.abort()
+    let alive = true
+    const timer = window.setTimeout(() => ctrl.abort(), 8000)
+    void fetchSession(ctrl.signal)
+      .then((next) => {
+        if (alive) {
+          setUser(next)
+          setAuthReady(true)
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setUser(null)
+          setAuthReady(true)
+        }
+      })
+      .finally(() => window.clearTimeout(timer))
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+      ctrl.abort()
+    }
   }, [])
 
   const onLocate = useCallback((target: PreviewTarget) => {
@@ -1253,6 +1270,19 @@ export function AdminPage() {
   }, [tab])
 
   // FR-AUTH：无有效会话时不渲染任何编辑界面，只给登录入口
+  if (!authReady) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
+        <div className="w-full max-w-[360px] rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+          <span className="mx-auto grid size-11 place-items-center rounded-xl bg-primary/10 text-[15px] font-bold text-primary">
+            H
+          </span>
+          <p className="mt-4 text-[13.5px] font-medium">正在验证管理员登录状态…</p>
+          <p className="mt-2 text-[12px] text-muted-foreground">未通过服务端验证前不会加载工作台内容。</p>
+        </div>
+      </div>
+    )
+  }
   if (!user) return <AdminLoginGate />
 
   return (

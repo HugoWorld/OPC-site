@@ -48,6 +48,17 @@ export function apiUrl(path: string): string {
   return `${GATEWAY_BASE}${path.startsWith("/") ? path : `/${path}`}`
 }
 
+/**
+ * 访客站地址：工作台在 8081，访客站在同主机 8080。
+ * 工作台里任何「返回站点前台」都必须走这里，不能再写 `#/`——
+ * 管理台的路由兜底会把 `#/` 接回 `#/admin/`。
+ */
+export function visitorSiteUrl(): string {
+  const url = new URL(window.location.origin)
+  if (url.port === "8081") url.port = "8080"
+  return `${url.origin}/`
+}
+
 export function loadSession(): AdminUser | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
@@ -139,8 +150,9 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
             : "feishu",
     )
   } catch {
-    // 网关不可达时保留缓存，避免断网把用户直接踢出编辑界面。
-    return loadSession()
+    // 网关不可达时不能用本地缓存冒充登录态：本地只存展示信息，不具备鉴权能力。
+    signOut()
+    return null
   }
 }
 
@@ -306,7 +318,10 @@ export function AdminLoginGate() {
         >
           去登录
         </a>
-        <a href="#/" className="mt-3 inline-block text-[12.5px] text-muted-foreground hover:text-foreground">
+        <a
+          href={visitorSiteUrl()}
+          className="mt-3 inline-block text-[12.5px] text-muted-foreground hover:text-foreground"
+        >
           返回站点前台
         </a>
       </div>
