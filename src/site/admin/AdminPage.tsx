@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Box,
   Check,
-  Database,
   Download,
   ExternalLink,
   FileCode2,
@@ -28,7 +27,6 @@ import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { AdminLoginGate, fetchSession, loadSession, shortOpenId, signOutRemote } from "@/site/admin/auth"
-import { BITABLE_TABLES, bitableReady } from "@/site/admin/bitable"
 import {
   ACCENT2_PRESETS,
   ACCENT_PRESETS,
@@ -440,7 +438,7 @@ function SliceEditor<K extends SliceKey>({
 
 /* ---------------- 总览 ---------------- */
 
-function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
+function Overview() {
   const { data, draft, hasDraftChanges, publishAll, publishing, publishError, lastPublishedAt, lastDraftSavedAt } = useSiteStore()
 
   const STAT_ICONS: Record<string, LucideIcon> = {
@@ -593,41 +591,6 @@ function Overview({ onShowDataSource }: { onShowDataSource?: () => void }) {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* v1.1 数据源：本机缓存 → 飞书多维表格（契约已冻结，未接入） */}
-      <div className="mt-4 rounded-xl border border-border bg-card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Database className="size-4 text-primary" />
-            <span className="text-[14.5px] font-semibold">数据源</span>
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-              {bitableReady() ? "已接入" : "未接入 · 本机缓存"}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onShowDataSource?.()}
-            className="text-[12px] font-medium text-primary hover:underline"
-          >
-            查看 {BITABLE_TABLES.length} 张表与待填项
-          </button>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-            <div className="text-[11px] text-muted-foreground">当前存储</div>
-            <div className="mt-0.5 text-[13px] font-medium">本机 localStorage（草稿 / 已发布 / 会话）</div>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-            <div className="text-[11px] text-muted-foreground">目标存储（v1.1）</div>
-            <div className="mt-0.5 text-[13px] font-medium">
-              飞书多维表格 · 一表一类 · {BITABLE_TABLES.length} 张表
-            </div>
-          </div>
-        </div>
-        <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-          表结构与读写契约已冻结，但网关未部署，尚未真实连接：发布仍写本机缓存，不构成落库。网关上线后此处切为「已接入」，写入即落到飞书 12 张表，家里电脑和线上站点读的是同一份。
-        </p>
       </div>
 
     </div>
@@ -1128,9 +1091,6 @@ export function AdminPage() {
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget>({ path: "/", anchor: "hero" })
   // FR-AUTH：先用本地展示缓存即时拦截，再由 /api/auth/me 以 Cookie 为准刷新。
   const [user, setUser] = useState(() => loadSession())
-  // FR-BE：数据源说明面板（真实飞书 + 本机快照）
-  const [dataSourceOpen, setDataSourceOpen] = useState(false)
-  const bitableOn = bitableReady()
   const onSignOut = useCallback(() => {
     void signOutRemote().finally(() => {
       window.location.hash = "#/login/"
@@ -1161,7 +1121,7 @@ export function AdminPage() {
   const renderBody = () => {
     switch (tab) {
       case "overview":
-        return <Overview onShowDataSource={() => setDataSourceOpen(true)} />
+        return <Overview />
       case "site":
         return (
           <>
@@ -1295,16 +1255,6 @@ export function AdminPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {/* 数据源：v1.1 目标为飞书多维表格，原型阶段仍写本机 */}
-            <button
-              type="button"
-              onClick={() => setDataSourceOpen((v) => !v)}
-              title="查看数据源说明"
-              className="hidden items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition-colors hover:bg-muted md:flex"
-            >
-              <Database className="size-3.5" />
-              {bitableOn ? "飞书多维表格" : "飞书 · 本机快照"}
-            </button>
             {/* 草稿自动保存状态 */}
             <span
               className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] font-medium md:flex ${
@@ -1365,50 +1315,6 @@ export function AdminPage() {
             </div>
           </div>
         </div>
-      {/* 数据源说明（FR-BE 契约展示；未接入） */}
-      {dataSourceOpen && (
-        <div className="absolute right-4 top-full z-50 mt-1 w-[430px] rounded-2xl border border-border bg-background p-4 shadow-[0_18px_50px_-16px_rgba(15,23,42,0.35)]">
-            <div className="flex items-center justify-between">
-              <span className="text-[14px] font-semibold">数据源</span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10.5px] font-medium text-amber-700">
-                {bitableOn ? "已接入" : "未接入 · 本机缓存"}
-              </span>
-            </div>
-            <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-              v1.1 已把数据后端定为飞书多维表格（一表一类，共 {BITABLE_TABLES.length} 张表）。
-              本轮只落表结构与读写契约，读写仍走本机：草稿键、已发布键、会话键。
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11.5px]">
-              <div className="rounded-lg border border-border bg-muted/30 px-2.5 py-2">
-                <div className="text-[10.5px] text-muted-foreground">当前存储</div>
-                <div className="mt-0.5 font-medium">本机 localStorage</div>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/30 px-2.5 py-2">
-                <div className="text-[10.5px] text-muted-foreground">目标存储</div>
-                <div className="mt-0.5 font-medium">飞书多维表格 · {BITABLE_TABLES.length} 张表</div>
-              </div>
-            </div>
-            <div className="mt-3 text-[10.5px] font-medium text-muted-foreground">
-              表清单（字段契约见 PRD 附录 A.7）
-            </div>
-            <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-              {BITABLE_TABLES.map((t) => (
-                <div key={t.table} className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="truncate font-mono text-[10.5px] text-foreground">{t.table}</span>
-                  <span className="truncate text-[10px] text-muted-foreground">{t.label}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-[11px] text-muted-foreground">
-              待填：app_token / table_id / 回调域名 / 网关落点（PRD §6 O-8、O-9）。填齐后本面板切为「已接入」。
-            </div>
-            <div className="mt-3 flex justify-end">
-              <Button size="sm" variant="ghost" onClick={() => setDataSourceOpen(false)}>
-                知道了
-              </Button>
-            </div>
-          </div>
-      )}
       </header>
 
       <div className="mx-auto flex w-full max-w-[1560px] gap-6 px-5 py-6">
