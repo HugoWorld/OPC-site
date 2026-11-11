@@ -15,8 +15,8 @@ export interface AdminUser {
   avatarUrl: string
   /** 展示用身份标识：完整 open_id 或「…尾号」。真实白名单在网关侧校验。 */
   openId: string
-  /** 登录来源：feishu = 真实飞书授权；demo = 演示模式；mock 仅为历史缓存兼容 */
-  source: "mock" | "feishu" | "demo"
+  /** 登录来源：feishu = 真实飞书授权；demo = 演示模式；bootstrap = 部署令牌；mock 仅为历史缓存兼容 */
+  source: "mock" | "feishu" | "demo" | "bootstrap"
   /** 登录时间戳（毫秒） */
   loginAt: number
 }
@@ -61,7 +61,10 @@ export function loadSession(): AdminUser | null {
       name: u.name,
       avatarUrl: typeof u.avatarUrl === "string" ? u.avatarUrl : "",
       openId: u.openId,
-      source: u.source === "feishu" || u.source === "demo" ? u.source : "mock",
+      source:
+        u.source === "feishu" || u.source === "demo" || u.source === "bootstrap"
+          ? u.source
+          : "mock",
       loginAt: u.loginAt,
     }
   } catch {
@@ -76,7 +79,7 @@ export function signInFeishu(
     avatarUrl: string
     openId: string
   },
-  source: "feishu" | "demo" = "feishu",
+  source: "feishu" | "demo" | "bootstrap" = "feishu",
 ): AdminUser {
   const user: AdminUser = { ...info, source, loginAt: Date.now() }
   try {
@@ -127,7 +130,11 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
         avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : "",
         openId: typeof data.openIdSuffix === "string" ? data.openIdSuffix : "…",
       },
-      data.source === "demo" ? "demo" : "feishu",
+      data.source === "demo"
+        ? "demo"
+        : data.source === "bootstrap"
+          ? "bootstrap"
+          : "feishu",
     )
   } catch {
     // 网关不可达时保留缓存，避免断网把用户直接踢出编辑界面。
@@ -139,6 +146,24 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
 export function startFeishuLogin(next = "/admin/") {
   const target = apiUrl(`/api/auth/start?next=${encodeURIComponent(next)}`)
   window.location.assign(target)
+}
+
+/** 部署令牌登录：OAuth 不可用时，用服务端 ADMIN_BOOTSTRAP_TOKEN 换管理员会话。 */
+export async function startBootstrapLogin(token: string, next = "/admin/"): Promise<void> {
+  const res = await fetch(apiUrl("/api/auth/bootstrap"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ token }),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as
+      | { error?: { code?: string; message?: string } }
+      | null
+    if (res.status === 429) throw new Error("登录尝试过于频繁，请稍后再试")
+    throw new Error(body?.error?.message ?? `部署令牌登录失败（HTTP ${res.status}）`)
+  }
+  window.location.assign(`#${next}`)
 }
 
 /** 演示模式专用：向网关换取演示会话 Cookie，再进入工作台。 */

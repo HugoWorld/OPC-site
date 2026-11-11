@@ -55,12 +55,14 @@ async function main(): Promise<void> {
     appId: config.appId,
     appSecret: config.appSecret,
     appToken: config.bitableAppToken,
+    accessToken: config.baseAccessToken,
     baseUrl: config.feishuBaseUrl,
   })
   const publisher = createFeishuPublisher({
     bitable,
     snapshots,
     tableIds: parseTableIds(process.env.FEISHU_TABLE_IDS_JSON),
+    baseMode: config.baseSyncMode,
   })
   const sessions = createSignedSessionStore({ secret: config.sessionSecret })
   const feishu = createFeishuClient({
@@ -79,11 +81,13 @@ async function main(): Promise<void> {
     sessionTtlMs: config.sessionTtlMs,
     secureCookies: config.secureCookies,
     demoMode: config.demoMode,
+    bootstrapToken: config.bootstrapToken,
     publicAdminOrigin: config.publicAdminOrigin,
     adminEntryPath: config.adminEntryPath,
-    oauth: config.demoMode
-      ? undefined
-      : {
+    oauth:
+      config.demoMode || !config.oauthEnabled
+        ? undefined
+        : {
           redirectUri: config.redirectUri,
           authorizeUrl: (state, redirectUri) =>
             buildFeishuAuthorizeUrl({

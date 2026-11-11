@@ -46,6 +46,12 @@ export interface FeishuBitableOptions {
   baseUrl?: string
   fetchImpl?: FetchLike
   timeoutMs?: number
+  /**
+   * 可选：直接注入一个已拿到的 access token（user_access_token 或 tenant_access_token）。
+   * 有值时优先使用，不再走 app_id/app_secret 换 tenant token；适用于个人身份
+   * OAuth 或企业管理员预置 token 的场景。token 由服务端环境变量注入，永不下发前端。
+   */
+  accessToken?: string
 }
 
 export class FeishuBitable {
@@ -55,10 +61,11 @@ export class FeishuBitable {
   private readonly appSecret: string
   private readonly fetchImpl: FetchLike
   private readonly timeoutMs: number
+  private readonly accessToken: string
   private token: { value: string; expiresAt: number } | null = null
 
   isConfigured(): boolean {
-    return Boolean(this.appToken)
+    return Boolean(this.appToken && (this.accessToken || (this.appId && this.appSecret)))
   }
 
   /** 列出 Base 内全部数据表；复制模板 Base 后表 ID 会变，必须按表名解析。 */
@@ -89,9 +96,11 @@ export class FeishuBitable {
     this.appSecret = opts.appSecret
     this.fetchImpl = opts.fetchImpl ?? fetch
     this.timeoutMs = opts.timeoutMs ?? 20_000
+    this.accessToken = opts.accessToken?.trim() ?? ""
   }
 
   private async tenantToken(force = false): Promise<string> {
+    if (this.accessToken) return this.accessToken
     const now = Date.now()
     if (!force && this.token && this.token.expiresAt > now + 60_000) {
       return this.token.value

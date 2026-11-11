@@ -20,11 +20,16 @@ import { FeishuApiError } from "./feishu-api.ts"
 import type { LocalSnapshotService } from "./local-snapshot.ts"
 import { createReleaseId } from "./local-snapshot.ts"
 
+/** Base 同步策略：required=必须 12 表全成才切快照；best-effort=Base 失败仍发布快照；off=不写 Base。 */
+export type BaseSyncMode = "required" | "best-effort" | "off"
+
 export interface FeishuPublisherOptions {
   bitable: FeishuBitable
   snapshots: LocalSnapshotService
   /** 显式指定表名 → table_id；不传则从 Base 按表名自动发现。 */
   tableIds?: Record<string, string>
+  /** Base 同步策略；默认 required（保持既有测试与生产严格语义）。 */
+  baseMode?: BaseSyncMode
   /** 发布审计里的目标描述 */
   targetLabel?: string
   now?: () => number
@@ -275,6 +280,7 @@ async function appendAudit(
 export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishService {
   const now = opts.now ?? (() => Date.now())
   const targetLabel = opts.targetLabel ?? "12 张业务表"
+  const baseMode: BaseSyncMode = opts.baseMode ?? "required"
 
   return {
     async publish(draft, operator): Promise<PublishResult> {
@@ -282,6 +288,39 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
       const rowsByTable = buildTableRows(draft as Record<string, unknown>)
       const writtenTables: string[] = []
       const failedTables: TableFailure[] = []
+
+      const writeSnapshot = async (): Promise<string> => {
+        const version = createReleaseId(at)
+        const envelope: SnapshotEnvelope = {
+          version,
+          generatedAt: at,
+          operatorSuffix: operator.openId.slice(-4),
+          data: draft as SnapshotEnvelope["data"],
+        }
+        await opts.snapshots.publish(envelope)
+        return version
+      }
+
+      /* off：只写本机不可变快照。用于 Base 凭据尚未就绪、但站点必须先上线的阶段。 */
+      if (baseMode === "off") {
+        try {
+          const version = await writeSnapshot()
+          return {
+            status: "ok",
+            version,
+            writtenTables: [],
+            at,
+            base: "off",
+            warnings: ["Base 同步已关闭（FEISHU_BASE_SYNC=off）；本次仅发布本机快照。"],
+          }
+        } catch (err) {
+          return {
+            status: "partial",
+            writtenTables: [],
+            failedTables: [failure("snapshot", err, "SNAP_WRITE_FAILED")],
+          }
+        }
+      }
 
       const tables = Object.keys(rowsByTable)
       const resolution = await resolveTableIds(opts.bitable, opts.tableIds)
@@ -314,6 +353,39 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
         else writtenTables.push(table)
       }
 
+      /* best-effort：Base 失败不阻断站点发布。快照是前台唯一读取源，
+       * 先保证站点可用；把 Base 失败作为 warnings 回给工作台。 */
+      if (baseMode === "best-effort" && failedTables.length > 0) {
+        try {
+          const version = await writeSnapshot()
+          const warnings = failedTables.map(
+            (f) => `${f.table}：${f.message}（${f.code}）`,
+          )
+          await appendAudit(
+            opts.bitable,
+            resolution.ids.audit_log,
+            operator,
+            "partial",
+            targetLabel,
+            at,
+          )
+          return {
+            status: "ok",
+            version,
+            writtenTables,
+            at,
+            base: "partial",
+            warnings,
+          }
+        } catch (err) {
+          return {
+            status: "partial",
+            writtenTables,
+            failedTables: [...failedTables, failure("snapshot", err, "SNAP_WRITE_FAILED")],
+          }
+        }
+      }
+
       if (writtenTables.length === 0) {
         await appendAudit(opts.bitable, resolution.ids.audit_log, operator, "failed", targetLabel, at)
         return { status: "failed", failedTables }
@@ -324,15 +396,10 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
         return { status: "partial", writtenTables, failedTables }
       }
 
-      const version = createReleaseId(at)
-      const envelope: SnapshotEnvelope = {
-        version,
-        generatedAt: at,
-        operatorSuffix: operator.openId.slice(-4),
-        data: draft as SnapshotEnvelope["data"],
-      }
       try {
-        await opts.snapshots.publish(envelope)
+        const version = await writeSnapshot()
+        await appendAudit(opts.bitable, resolution.ids.audit_log, operator, "ok", targetLabel, at)
+        return { status: "ok", version, writtenTables, at, base: "ok" }
       } catch (err) {
         return {
           status: "partial",
@@ -340,9 +407,6 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
           failedTables: [failure("snapshot", err, "SNAP_WRITE_FAILED")],
         }
       }
-
-      await appendAudit(opts.bitable, resolution.ids.audit_log, operator, "ok", targetLabel, at)
-      return { status: "ok", version, writtenTables, at }
     },
   }
 }

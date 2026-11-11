@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 
-import { apiUrl, startDemoLogin, startFeishuLogin } from "@/site/admin/auth"
+import { apiUrl, startBootstrapLogin, startDemoLogin, startFeishuLogin } from "@/site/admin/auth"
 
 function readLoginQuery(): { next: string; error: string } {
   const raw = window.location.hash.replace(/^#/, "")
@@ -36,6 +36,9 @@ const ERROR_TEXT: Record<string, string> = {
 export function LoginPage() {
   const { next, error } = readLoginQuery()
   const [demoMode, setDemoMode] = useState(false)
+  const [bootstrapEnabled, setBootstrapEnabled] = useState(false)
+  const [oauthConfigured, setOauthConfigured] = useState(true)
+  const [bootstrapToken, setBootstrapToken] = useState("")
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState("")
 
@@ -43,9 +46,18 @@ export function LoginPage() {
     let alive = true
     void fetch(apiUrl("/api/setup"))
       .then((res) => (res.ok ? res.json() : null))
-      .then((body: { demoMode?: boolean } | null) => {
-        if (alive && body?.demoMode) setDemoMode(true)
-      })
+      .then(
+        (
+          body:
+            | { demoMode?: boolean; bootstrapEnabled?: boolean; oauthConfigured?: boolean }
+            | null,
+        ) => {
+          if (!alive || !body) return
+          if (body.demoMode) setDemoMode(true)
+          if (body.bootstrapEnabled) setBootstrapEnabled(true)
+          if (body.oauthConfigured === false) setOauthConfigured(false)
+        },
+      )
       .catch(() => {
         /* 网关未启动时保持默认，不影响页面展示 */
       })
@@ -54,18 +66,34 @@ export function LoginPage() {
     }
   }, [])
 
+  const bootstrapMode = !demoMode && bootstrapEnabled && !oauthConfigured
+
   const onLogin = () => {
-    if (!demoMode) {
-      startFeishuLogin(next)
+    if (demoMode) {
+      setBusy(true)
+      setActionError("")
+      void startDemoLogin(next)
+        .catch((e: unknown) => {
+          setActionError(e instanceof Error ? e.message : "演示登录失败，请重试")
+        })
+        .finally(() => setBusy(false))
       return
     }
-    setBusy(true)
-    setActionError("")
-    void startDemoLogin(next)
-      .catch((e: unknown) => {
-        setActionError(e instanceof Error ? e.message : "演示登录失败，请重试")
-      })
-      .finally(() => setBusy(false))
+    if (bootstrapMode) {
+      if (!bootstrapToken.trim()) {
+        setActionError("请先填写部署令牌")
+        return
+      }
+      setBusy(true)
+      setActionError("")
+      void startBootstrapLogin(bootstrapToken.trim(), next)
+        .catch((e: unknown) => {
+          setActionError(e instanceof Error ? e.message : "部署令牌登录失败，请重试")
+        })
+        .finally(() => setBusy(false))
+      return
+    }
+    startFeishuLogin(next)
   }
 
   return (
@@ -111,7 +139,7 @@ export function LoginPage() {
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-semibold">管理员登录</span>
             <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              飞书授权登录
+              {bootstrapMode ? "部署令牌登录" : "飞书授权登录"}
             </span>
           </div>
 
@@ -136,6 +164,24 @@ export function LoginPage() {
             </p>
           ) : null}
 
+          {bootstrapMode ? (
+            <div className="mt-4 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-sky-900">
+              当前未启用飞书 OAuth。请使用部署时写入
+              <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
+                ADMIN_BOOTSTRAP_TOKEN
+              </code>
+              的令牌进入工作台；令牌只用于管理员登录，不会写入浏览器存储。
+              <input
+                type="password"
+                value={bootstrapToken}
+                onChange={(e) => setBootstrapToken(e.target.value)}
+                placeholder="部署令牌"
+                autoComplete="current-password"
+                className="mt-3 h-10 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
+              />
+            </div>
+          ) : null}
+
           {actionError ? (
             <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-red-700">
               {actionError}
@@ -148,8 +194,16 @@ export function LoginPage() {
             disabled={busy}
             className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#3370ff] text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="grid size-5 place-items-center rounded bg-white/15 text-[11px] font-bold">飞</span>
-            {busy ? "正在进入…" : demoMode ? "进入演示工作台" : "使用飞书账号登录"}
+            <span className="grid size-5 place-items-center rounded bg-white/15 text-[11px] font-bold">
+              {bootstrapMode ? "令" : "飞"}
+            </span>
+            {busy
+              ? "正在进入…"
+              : demoMode
+                ? "进入演示工作台"
+                : bootstrapMode
+                  ? "使用部署令牌进入"
+                  : "使用飞书账号登录"}
           </button>
 
           {demoMode ? (
@@ -161,13 +215,15 @@ export function LoginPage() {
           <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
             {demoMode
               ? "演示模式不跳转飞书，只签发一个仅本机有效的演示会话；改回真实登录后，这里才会跳转飞书授权页。"
-              : "点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的"}
-            {!demoMode ? (
+              : bootstrapMode
+                ? "部署令牌由服务端环境变量提供，登录后签发 HttpOnly 会话；飞书 OAuth 恢复后会自动切回飞书授权登录。"
+                : "点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的"}
+            {!demoMode && !bootstrapMode ? (
               <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground/80">
                 ADMIN_OPEN_IDS
               </code>
             ) : null}
-            {!demoMode ? "白名单。" : ""}
+            {!demoMode && !bootstrapMode ? "白名单。" : ""}
           </p>
 
           <div className="mt-6 rounded-xl border border-border bg-muted/40 p-4">

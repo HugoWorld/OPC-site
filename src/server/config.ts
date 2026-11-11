@@ -7,6 +7,9 @@
 
 import path from "node:path"
 
+/** Base 同步策略，与 feishu-publisher.ts 的 BaseSyncMode 保持一致（避免 server 反向依赖发布器）。 */
+export type BaseSyncMode = "required" | "best-effort" | "off"
+
 export interface GatewayConfig {
   host: string
   port: number
@@ -15,7 +18,18 @@ export interface GatewayConfig {
   appId: string
   appSecret: string
   bitableAppToken: string
+  /** 直接注入的 Base access token（user_access_token / tenant_access_token）；空=用 app 身份换 token */
+  baseAccessToken: string
+  /** required | best-effort | off */
+  baseSyncMode: BaseSyncMode
   adminOpenIds: string[]
+  /**
+   * 部署引导令牌：OAuth 不可用时，运维可用它换取管理员会话。
+   * 只从服务端环境变量读取，前端只提交输入值，不落 localStorage。
+   */
+  bootstrapToken: string
+  /** 是否启用飞书 OAuth；个人账号无企业租户时可置 0，改用部署令牌登录 */
+  oauthEnabled: boolean
   sessionSecret: string
   sessionTtlMs: number
   secureCookies: boolean
@@ -70,6 +84,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
   const appSecret = envString(env, "FEISHU_APP_SECRET")
   const sessionSecret = envString(env, "SESSION_SECRET")
   const adminOpenIds = splitIds(envString(env, "ADMIN_OPEN_IDS"))
+  const baseAccessToken = envString(env, "FEISHU_BASE_ACCESS_TOKEN")
+  const bootstrapToken = envString(env, "ADMIN_BOOTSTRAP_TOKEN")
+  const oauthEnabled = envBool(env, "FEISHU_OAUTH_ENABLED", true)
+  const rawBaseSyncMode = envString(env, "FEISHU_BASE_SYNC", "required").toLowerCase()
+  const baseSyncMode: BaseSyncMode =
+    rawBaseSyncMode === "off" || rawBaseSyncMode === "best-effort" || rawBaseSyncMode === "required"
+      ? rawBaseSyncMode
+      : "required"
 
   if (!demoMode) {
     if (!appId || !appSecret) {
@@ -80,6 +102,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     }
     if (adminOpenIds.length === 0) {
       throw new Error("ADMIN_OPEN_IDS 至少需要一个管理员 open_id")
+    }
+    if (bootstrapToken && bootstrapToken.length < 16) {
+      throw new Error("ADMIN_BOOTSTRAP_TOKEN 至少需要 16 个字符")
     }
   }
 
@@ -97,7 +122,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     appId: appId || "demo-app",
     appSecret: appSecret || "demo-secret",
     bitableAppToken: envString(env, "BITABLE_APP_TOKEN"),
+    baseAccessToken,
+    baseSyncMode,
     adminOpenIds: adminOpenIds.length > 0 ? adminOpenIds : ["demo-open-id"],
+    bootstrapToken,
+    oauthEnabled,
     sessionSecret: sessionSecret.length >= 16 ? sessionSecret : "demo-session-secret-not-for-production",
     sessionTtlMs: envNumber(env, "SESSION_TTL_MS", 12 * 3600 * 1000),
     secureCookies: envBool(

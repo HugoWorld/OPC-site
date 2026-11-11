@@ -6,6 +6,7 @@
 
 import type { PublishResult } from "../site/admin/data/adapter.ts"
 import type { SnapshotEnvelope } from "../site/admin/data/snapshot.ts"
+import { timingSafeEqual } from "node:crypto"
 import {
   createMemoryRateLimiter,
   type RateLimiter,
@@ -33,6 +34,8 @@ export interface SessionPayload {
   expiresAt: number
   /** 演示模式会话：仅在 deps.demoMode 为真时被 authenticate 接受 */
   demo?: boolean
+  /** 部署令牌会话：仅用于 OAuth 不可用时的运维登录，审计上单独标记 */
+  bootstrap?: boolean
 }
 
 export interface SessionStore {
@@ -77,6 +80,8 @@ export interface GatewayDeps {
   rateRules?: Partial<RateLimitRules>
   /** 演示模式：未配置飞书凭据也能启动访客站与工作台外壳，不提供登录 */
   demoMode?: boolean
+  /** 部署引导令牌：OAuth 不可用时用固定令牌换管理员会话；空=关闭该入口 */
+  bootstrapToken?: string
 }
 
 export interface RateLimitRules {
@@ -393,6 +398,46 @@ export function createGateway(deps: GatewayDeps) {
       }
     }
 
+    /* POST /api/auth/bootstrap：OAuth 不可用时的部署令牌登录。
+     * 只在服务端配置了 ADMIN_BOOTSTRAP_TOKEN 且非演示模式时开放；
+     * 令牌比较用 timingSafeEqual，失败按 IP 计入登录限流。 */
+    if (path === "/api/auth/bootstrap" && method === "POST") {
+      const expected = deps.bootstrapToken ?? ""
+      if (deps.demoMode || !expected) {
+        return error(404, "NOT_FOUND", "部署令牌登录未启用")
+      }
+      const body = parseBody(req.bodyText)
+      if (!body) return error(400, "BAD_REQUEST", "请求体不是合法 JSON")
+      const supplied = typeof body.token === "string" ? body.token : ""
+      const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
+      if (!gate.allowed) return tooMany(gate.retryAfterMs)
+      const a = Buffer.from(supplied)
+      const b = Buffer.from(expected)
+      const matched = a.length === b.length && timingSafeEqual(a, b)
+      if (!matched) return error(401, "INVALID_BOOTSTRAP_TOKEN", "部署令牌不正确")
+      const now = Date.now()
+      const session: SessionPayload = {
+        openId: deps.adminOpenIds[0],
+        name: "HugoW",
+        avatarUrl: "",
+        createdAt: now,
+        expiresAt: now + deps.sessionTtlMs,
+        bootstrap: true,
+      }
+      const sid = await deps.sessions.create(session)
+      return json(
+        200,
+        {
+          name: session.name,
+          avatarUrl: session.avatarUrl,
+          openIdSuffix: maskOpenId(session.openId),
+          expiresAt: session.expiresAt,
+          source: "bootstrap",
+        },
+        { "set-cookie": sessionCookie(sid, deps.secureCookies ?? true) },
+      )
+    }
+
     /* POST /api/auth/demo：演示模式下的一次性管理员入口。
      * 只在 HUGOW_DEMO=1 时开放；真实部署关掉演示模式后此端点直接 404。 */
     if (path === "/api/auth/demo" && method === "POST") {
@@ -450,7 +495,7 @@ export function createGateway(deps: GatewayDeps) {
         avatarUrl: auth.session.avatarUrl,
         openIdSuffix: maskOpenId(auth.session.openId),
         expiresAt: auth.session.expiresAt,
-        source: auth.session.demo ? "demo" : "feishu",
+        source: auth.session.demo ? "demo" : auth.session.bootstrap ? "bootstrap" : "feishu",
       })
     }
 
@@ -516,6 +561,7 @@ export function createGateway(deps: GatewayDeps) {
         adminCount: deps.adminOpenIds.length,
         secureCookies: deps.secureCookies ?? true,
         demoMode: Boolean(deps.demoMode),
+        bootstrapEnabled: Boolean(deps.bootstrapToken) && !deps.demoMode,
       })
     }
 

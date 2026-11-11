@@ -30,7 +30,16 @@ export interface LoadResult {
 }
 
 export type PublishResult =
-  | { status: "ok"; version: string; writtenTables: string[]; at: number }
+  | {
+      status: "ok"
+      version: string
+      writtenTables: string[]
+      at: number
+      /** Base 同步结果：ok=12 表全成；partial=部分/全部失败但仍切了快照；off=未启用 Base 同步 */
+      base?: "ok" | "partial" | "off"
+      /** 非阻断告警（例如 Base 权限不足时的原因） */
+      warnings?: string[]
+    }
   | {
       status: "partial"
       version?: string

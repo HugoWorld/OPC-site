@@ -74,6 +74,19 @@ if [ -z "$secret" ]; then
 fi
 sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${secret}|" .env
 
+# 部署令牌：OAuth 不可用时的管理员应急入口；已存在非空值则保留。
+bootstrap="$(openssl rand -hex 24 2>/dev/null || true)"
+if [ -z "$bootstrap" ]; then
+  bootstrap="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+fi
+if ! grep -q '^ADMIN_BOOTSTRAP_TOKEN=.\+' .env; then
+  if grep -q '^ADMIN_BOOTSTRAP_TOKEN=' .env; then
+    sed -i "s|^ADMIN_BOOTSTRAP_TOKEN=.*|ADMIN_BOOTSTRAP_TOKEN=${bootstrap}|" .env
+  else
+    printf 'ADMIN_BOOTSTRAP_TOKEN=%s\n' "$bootstrap" >> .env
+  fi
+fi
+
 set_env() {
   local key="$1" value="$2"
   if grep -q "^${key}=" .env; then
@@ -157,6 +170,7 @@ cat <<EOF
 访客站：   http://127.0.0.1:${www_port}
 工作台：   http://127.0.0.1:${admin_port}
 健康检查： http://127.0.0.1:${admin_port}/api/health
+部署令牌： ${bootstrap}   （OAuth 不可用时，在登录页填写它进入工作台）
 
 常用命令：
   ./hugow status     查看状态
