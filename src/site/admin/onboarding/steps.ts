@@ -52,8 +52,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** 已知非秘密标识预填，减少用户输入 */
 export const DEFAULT_CONFIG: OnboardingConfig = {
-  appId: "cli_aa780ddd2c389d1e",
-  baseToken: "QYRqbmk9TaalWjsf1V5cp0qDnoX",
+  appId: "cli_aa7e84534cfb9d09",
+  baseToken: "UymEb9sk3aeahOsbaDQcp8Eqnmf",
   gatewayUrl: "",
   callbackUrl: "",
   adminOpenId: "",
@@ -101,25 +101,25 @@ export interface TableManifest {
 }
 
 export const TABLE_MANIFEST: TableManifest[] = [
-  { key: "site_config", label: "站点配置", hint: "站名、域名、SEO 等全局设置", tableId: "tblmk0h49rjsRu09" },
-  { key: "home_blocks", label: "首页区块", hint: "首页每个板块的标题与顺序", tableId: "tblUJEXb3NKPl8P0" },
-  { key: "solutions", label: "能力方案", hint: "能力方案条目与详情", tableId: "tblkYSF2mEGSIqiO" },
-  { key: "articles", label: "文章", hint: "文章与案例正文", tableId: "tblg3kW0m8Rxq7IF" },
-  { key: "products", label: "产品", hint: "产品 / 服务卡片", tableId: "tblnIFxJ3fXalWpg" },
-  { key: "shares", label: "分享", hint: "对外分享的链接与素材", tableId: "tblTMRCdcrM3VxMU" },
-  { key: "pages", label: "自定义页面", hint: "自定义页面的区块结构", tableId: "tblDUFpEdPmsZoWZ" },
-  { key: "method_faq", label: "方法与 FAQ", hint: "方法页与常见问题", tableId: "tblwqrEvsJn3UlXd" },
-  { key: "about", label: "关于我", hint: "人物介绍与履历", tableId: "tbluHzMJbE3MdtAg" },
-  { key: "theme", label: "主题与排版", hint: "主题色与排版微调", tableId: "tbl1MYrfFpvFf4d8" },
-  { key: "samples_testimonials", label: "样例与好评", hint: "演示样例与好评墙", tableId: "tblgX27LxBmepNpx" },
-  { key: "audit_log", label: "操作审计", hint: "谁在什么时候改了什么", tableId: "tblOaWUnCJKo7tJy" },
+  { key: "site_config", label: "站点配置", hint: "站名、域名、SEO 等全局设置", tableId: "tbl8NyBjLVgb7aWl" },
+  { key: "home_blocks", label: "首页区块", hint: "首页每个板块的标题与顺序", tableId: "tbl1yB7Q5XzyvJcN" },
+  { key: "solutions", label: "能力方案", hint: "能力方案条目与详情", tableId: "tblM9ZdfN5KvmMrp" },
+  { key: "articles", label: "文章", hint: "文章与案例正文", tableId: "tblvTbvmOVx5oI85" },
+  { key: "products", label: "产品", hint: "产品 / 服务卡片", tableId: "tblQblajQjMDOPHY" },
+  { key: "shares", label: "分享", hint: "对外分享的链接与素材", tableId: "tblXqlG0WGi7GQLp" },
+  { key: "pages", label: "自定义页面", hint: "自定义页面的区块结构", tableId: "tblT4N7s3cmSRloF" },
+  { key: "method_faq", label: "方法与 FAQ", hint: "方法页与常见问题", tableId: "tbll2ISn4Xddr7xT" },
+  { key: "about", label: "关于我", hint: "人物介绍与履历", tableId: "tblKJRS21FLDaip3" },
+  { key: "theme", label: "主题与排版", hint: "主题色与排版微调", tableId: "tblBWUgrOMB2MXCY" },
+  { key: "samples_testimonials", label: "样例与好评", hint: "演示样例与好评墙", tableId: "tblTJqtPBCw6ue05" },
+  { key: "audit_log", label: "操作审计", hint: "谁在什么时候改了什么", tableId: "tblkxJ6PHh2uMU5X" },
 ]
 
 /** 已预置的数据后端（本项目就是这一张表，运营管理员不需要自己找） */
 export const BASE_PRESET = {
-  token: "QYRqbmk9TaalWjsf1V5cp0qDnoX",
-  name: "HugoW 个人专业门户数据",
-  url: "https://my.feishu.cn/base/QYRqbmk9TaalWjsf1V5cp0qDnoX",
+  token: "UymEb9sk3aeahOsbaDQcp8Eqnmf",
+  name: "OPC-site-Base",
+  url: "https://my.feishu.cn/base/UymEb9sk3aeahOsbaDQcp8Eqnmf",
 }
 
 /**
@@ -144,7 +144,7 @@ export const ONBOARDING_STEPS: StepDef[] = [
     check: async (cfg) => {
       await sleep(450)
       if (/^cli_[a-z0-9]{12,}$/i.test(cfg.appId.trim())) {
-        return { status: "done", message: "应用标识格式正确，机器人能力已添加（OPC-site-gateway）" }
+        return { status: "done", message: "应用标识格式正确，机器人能力已添加（OPC-site）" }
       }
       return { status: "pending", message: "App ID 格式不正确，应以 cli_ 开头" }
     },

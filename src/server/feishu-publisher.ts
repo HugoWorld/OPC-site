@@ -324,33 +324,48 @@ export function createFeishuPublisher(opts: FeishuPublisherOptions): PublishServ
 
       const tables = Object.keys(rowsByTable)
       const resolution = await resolveTableIds(opts.bitable, opts.tableIds)
-      for (const table of tables) {
+
+      /* 12 张表彼此独立，串行写要 50s+，会被 Nginx/浏览器超时截断。
+       * 小并发（4）压到十几秒，同时避开飞书 1254291 并发写冲突。 */
+      const writeOne = async (table: string): Promise<{ ok: boolean; failure?: TableFailure }> => {
         const spec = TABLE_SPECS[table]
         const tableId = resolution.ids[table]
         if (!spec) {
-          failedTables.push({
-            table,
-            code: "TABLE_NOT_CONFIGURED",
-            message: `缺少 ${table} 的表契约`,
-            retryable: false,
-          })
-          continue
+          return {
+            ok: false,
+            failure: {
+              table,
+              code: "TABLE_NOT_CONFIGURED",
+              message: `缺少 ${table} 的表契约`,
+              retryable: false,
+            },
+          }
         }
         if (!tableId) {
-          failedTables.push({
-            table,
-            code: "TABLE_NOT_FOUND",
-            message:
-              `Base 中找不到表「${table}」` +
-              (resolution.error ? `（读取表清单失败：${resolution.error}）` : "") +
-              "；请确认已复制模板 Base，并把应用加入该 Base 的文档应用。",
-            retryable: false,
-          })
-          continue
+          return {
+            ok: false,
+            failure: {
+              table,
+              code: "TABLE_NOT_FOUND",
+              message:
+                `Base 中找不到表「${table}」` +
+                (resolution.error ? `（读取表清单失败：${resolution.error}）` : "") +
+                "；请确认已复制模板 Base，并把应用加入该 Base 的文档应用。",
+              retryable: false,
+            },
+          }
         }
         const result = await writeTable(opts.bitable, spec, tableId, rowsByTable[table])
-        if (result.failure) failedTables.push(result.failure)
-        else writtenTables.push(table)
+        return { ok: !result.failure, failure: result.failure }
+      }
+
+      for (let i = 0; i < tables.length; i += 4) {
+        const batch = tables.slice(i, i + 4)
+        const results = await Promise.all(batch.map(writeOne))
+        results.forEach((result, index) => {
+          if (result.ok) writtenTables.push(batch[index])
+          else if (result.failure) failedTables.push(result.failure)
+        })
       }
 
       /* best-effort：Base 失败不阻断站点发布。快照是前台唯一读取源，

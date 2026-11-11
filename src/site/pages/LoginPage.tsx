@@ -81,14 +81,14 @@ export function LoginPage() {
     }
     if (bootstrapMode) {
       if (!bootstrapToken.trim()) {
-        setActionError("请先填写部署令牌")
+        setActionError("请先填写管理员登录令牌")
         return
       }
       setBusy(true)
       setActionError("")
       void startBootstrapLogin(bootstrapToken.trim(), next)
         .catch((e: unknown) => {
-          setActionError(e instanceof Error ? e.message : "部署令牌登录失败，请重试")
+          setActionError(e instanceof Error ? e.message : "管理员登录令牌验证失败，请重试")
         })
         .finally(() => setBusy(false))
       return
@@ -139,7 +139,7 @@ export function LoginPage() {
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-semibold">管理员登录</span>
             <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              {bootstrapMode ? "部署令牌登录" : "飞书授权登录"}
+              {bootstrapMode ? "管理员登录令牌" : "飞书授权登录"}
             </span>
           </div>
 
@@ -170,12 +170,12 @@ export function LoginPage() {
               <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
                 ADMIN_BOOTSTRAP_TOKEN
               </code>
-              的令牌进入工作台；令牌只用于管理员登录，不会写入浏览器存储。
+              的管理员登录令牌进入工作台。这不是给客户的授权码，只用于站点所有者登录，且不会写入浏览器存储。
               <input
                 type="password"
                 value={bootstrapToken}
                 onChange={(e) => setBootstrapToken(e.target.value)}
-                placeholder="部署令牌"
+                placeholder="管理员登录令牌"
                 autoComplete="current-password"
                 className="mt-3 h-10 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
               />
@@ -202,7 +202,7 @@ export function LoginPage() {
               : demoMode
                 ? "进入演示工作台"
                 : bootstrapMode
-                  ? "使用部署令牌进入"
+                  ? "用管理员令牌进入"
                   : "使用飞书账号登录"}
           </button>
 
@@ -216,7 +216,7 @@ export function LoginPage() {
             {demoMode
               ? "演示模式不跳转飞书，只签发一个仅本机有效的演示会话；改回真实登录后，这里才会跳转飞书授权页。"
               : bootstrapMode
-                ? "部署令牌由服务端环境变量提供，登录后签发 HttpOnly 会话；飞书 OAuth 恢复后会自动切回飞书授权登录。"
+                ? "管理员登录令牌由服务端环境变量提供，不是客户授权码；登录后签发 HttpOnly 会话，飞书 OAuth 恢复后会自动切回飞书授权登录。"
                 : "点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的"}
             {!demoMode && !bootstrapMode ? (
               <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground/80">

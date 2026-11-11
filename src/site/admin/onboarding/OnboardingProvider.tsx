@@ -73,7 +73,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const [config, setConfig] = useState<OnboardingConfig>(() => {
     // 网域与管理员身份始终以「当前环境 + 当前登录」为准，不允许沿用历史值
-    const base = { ...DEFAULT_CONFIG, ...(persisted.config ?? {}) }
+    // 后端切换（Base token 变化）时丢弃旧预置配置与旧步骤结论，避免继续显示上一个 Base/应用。
+    const stalePreset = Boolean(
+      persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken,
+    )
+    const base = { ...DEFAULT_CONFIG, ...(stalePreset ? {} : persisted.config ?? {}) }
     return {
       ...base,
       gatewayUrl: endpoints.gatewayUrl,
@@ -81,19 +85,37 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       adminOpenId: session?.openId ?? "",
     }
   })
-  const [marks, setMarks] = useState<ManualMarks>(persisted.marks ?? {})
-  const [statuses, setStatuses] = useState<Record<string, StepStatus>>(persisted.statuses ?? {})
-  const [messages, setMessages] = useState<Record<string, string>>(persisted.messages ?? {})
+  const [marks, setMarks] = useState<ManualMarks>(
+    persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken
+      ? {}
+      : persisted.marks ?? {},
+  )
+  const [statuses, setStatuses] = useState<Record<string, StepStatus>>(
+    persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken
+      ? {}
+      : persisted.statuses ?? {},
+  )
+  const [messages, setMessages] = useState<Record<string, string>>(
+    persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken
+      ? {}
+      : persisted.messages ?? {},
+  )
   // 只有「连通性验证」真的通过才算初始化完成；旧版纯本地模式留下的 finished 不再冒充完成
-  const [finished, setFinished] = useState<boolean>(
-    Boolean(persisted.finished) && persisted.statuses?.verify === "done",
-  )
+  const [finished, setFinished] = useState<boolean>(() => {
+    if (persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken) {
+      return false
+    }
+    return Boolean(persisted.finished) && persisted.statuses?.verify === "done"
+  })
   // 步骤会随版本增减：历史持久值里的 currentStep 若已不存在，回落到第一步
-  const [currentStep, setCurrentStep] = useState<string>(() =>
-    ONBOARDING_STEPS.some((s) => s.id === persisted.currentStep)
+  const [currentStep, setCurrentStep] = useState<string>(() => {
+    if (persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken) {
+      return ONBOARDING_STEPS[0].id
+    }
+    return ONBOARDING_STEPS.some((s) => s.id === persisted.currentStep)
       ? (persisted.currentStep as string)
-      : ONBOARDING_STEPS[0].id,
-  )
+      : ONBOARDING_STEPS[0].id
+  })
   const [wizardOpen, setWizardOpen] = useState(false)
 
   const activeSteps = ONBOARDING_STEPS

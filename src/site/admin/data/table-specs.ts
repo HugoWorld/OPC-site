@@ -12,18 +12,18 @@ import { SOLUTIONS_TABLE } from "./table-schema.ts"
 
 /** 表名 → 实测 table_id；适配层只认这套坐标，避免运行期猜表。 */
 export const FEISHU_TABLE_IDS: Record<string, string> = {
-  site_config: "tblmk0h49rjsRu09",
-  home_blocks: "tblUJEXb3NKPl8P0",
-  solutions: "tblkYSF2mEGSIqiO",
-  articles: "tblg3kW0m8Rxq7IF",
-  products: "tblnIFxJ3fXalWpg",
-  shares: "tblTMRCdcrM3VxMU",
-  pages: "tblDUFpEdPmsZoWZ",
-  method_faq: "tblwqrEvsJn3UlXd",
-  about: "tbluHzMJbE3MdtAg",
-  theme: "tbl1MYrfFpvFf4d8",
-  samples_testimonials: "tblgX27LxBmepNpx",
-  audit_log: "tblOaWUnCJKo7tJy",
+  site_config: "tbl8NyBjLVgb7aWl",
+  home_blocks: "tbl1yB7Q5XzyvJcN",
+  solutions: "tblM9ZdfN5KvmMrp",
+  articles: "tblvTbvmOVx5oI85",
+  products: "tblQblajQjMDOPHY",
+  shares: "tblXqlG0WGi7GQLp",
+  pages: "tblT4N7s3cmSRloF",
+  method_faq: "tbll2ISn4Xddr7xT",
+  about: "tblKJRS21FLDaip3",
+  theme: "tblBWUgrOMB2MXCY",
+  samples_testimonials: "tblTJqtPBCw6ue05",
+  audit_log: "tblkxJ6PHh2uMU5X",
 }
 
 export const SITE_CONFIG_TABLE: TableSpec = {

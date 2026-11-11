@@ -294,10 +294,11 @@ export function SiteStoreProvider({
     return () => window.removeEventListener("storage", onStorage)
   }, [scope])
 
-  // 访客站以发布快照为准：读取 ./data/current.json → 版本文件；失败回落本地缓存。
-  // 快照由 Nginx 静态托管（www 与 admin 共用同一数据目录），不依赖管理台 Cookie。
+  // 工作台与访客站都以服务端发布快照为基线：
+  // - published：前台直接渲染快照；
+  // - draft：工作台先拉取同一份快照作为“已发布”基线，否则新浏览器会误显示“尚未发布过”。
   useEffect(() => {
-    if (scope !== "published") return
+    if (scope !== "published" && scope !== "draft") return
     const ctrl = new AbortController()
     void (async () => {
       const envelope = await readSnapshot({
@@ -307,6 +308,10 @@ export function SiteStoreProvider({
       if (ctrl.signal.aborted || !envelope) return
       setPublished(envelope.data)
       persist(PUBLISHED_KEY, envelope.data)
+      if (scope === "draft") {
+        // 没有本地草稿时，用线上快照作为编辑起点，避免“空草稿 vs 已发布”被误判为有改动。
+        setDraft((prev) => (Object.keys(prev).length > 0 ? prev : envelope.data))
+      }
       if (typeof envelope.generatedAt === "number") setLastPublishedAt(envelope.generatedAt)
     })()
     return () => ctrl.abort()
