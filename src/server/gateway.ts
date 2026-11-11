@@ -6,7 +6,7 @@
 
 import type { PublishResult } from "../site/admin/data/adapter.ts"
 import type { SnapshotEnvelope } from "../site/admin/data/snapshot.ts"
-import { timingSafeEqual } from "node:crypto"
+import { createHash, timingSafeEqual } from "node:crypto"
 import {
   createMemoryRateLimiter,
   type RateLimiter,
@@ -421,9 +421,9 @@ export function createGateway(deps: GatewayDeps) {
       const suppliedUser = typeof body.username === "string" ? body.username : ""
       const suppliedPassword = typeof body.password === "string" ? body.password : ""
       const expectedUser = deps.loginUser ?? "admin"
-      const a = Buffer.from(suppliedPassword)
-      const b = Buffer.from(expectedPassword)
-      const matched = a.length === b.length && timingSafeEqual(a, b)
+      const a = createHash("sha256").update(suppliedPassword).digest()
+      const b = createHash("sha256").update(expectedPassword).digest()
+      const matched = timingSafeEqual(a, b)
       if (suppliedUser !== expectedUser || !matched) {
         return error(401, "INVALID_CREDENTIALS", "账号或密码不正确")
       }
