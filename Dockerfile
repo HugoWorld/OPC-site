@@ -21,7 +21,8 @@ ENV NODE_ENV=production \
     PORT=8787 \
     DATA_DIR=/srv/hugow/data
 
-RUN apt-get update \
+RUN find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec sed -i 's|deb.debian.org|mirrors.tencentyun.com|g; s|security.debian.org|mirrors.tencentyun.com|g' {} + \
+    && apt-get update \
     && apt-get install -y --no-install-recommends nginx gosu curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 hugow \
