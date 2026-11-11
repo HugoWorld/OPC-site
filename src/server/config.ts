@@ -28,6 +28,12 @@ export interface GatewayConfig {
    * 只从服务端环境变量读取，前端只提交输入值，不落 localStorage。
    */
   bootstrapToken: string
+  /** 管理员账号密码登录：用户名（默认 admin） */
+  loginUser: string
+  /** 管理员账号密码登录：密码；为空则关闭该入口 */
+  loginPassword: string
+  /** 账号密码登录后展示的姓名 */
+  displayName: string
   /** 是否启用飞书 OAuth；个人账号无企业租户时可置 0，改用部署令牌登录 */
   oauthEnabled: boolean
   sessionSecret: string
@@ -86,6 +92,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
   const adminOpenIds = splitIds(envString(env, "ADMIN_OPEN_IDS"))
   const baseAccessToken = envString(env, "FEISHU_BASE_ACCESS_TOKEN")
   const bootstrapToken = envString(env, "ADMIN_BOOTSTRAP_TOKEN")
+  const loginUser = envString(env, "ADMIN_LOGIN_USER", "admin")
+  const loginPassword = envString(env, "ADMIN_LOGIN_PASSWORD")
+  const displayName = envString(env, "ADMIN_DISPLAY_NAME", "HugoW")
   const oauthEnabled = envBool(env, "FEISHU_OAUTH_ENABLED", true)
   const rawBaseSyncMode = envString(env, "FEISHU_BASE_SYNC", "required").toLowerCase()
   const baseSyncMode: BaseSyncMode =
@@ -105,6 +114,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     }
     if (bootstrapToken && bootstrapToken.length < 16) {
       throw new Error("ADMIN_BOOTSTRAP_TOKEN 至少需要 16 个字符")
+    }
+    if (loginPassword && loginPassword.length < 10) {
+      throw new Error("ADMIN_LOGIN_PASSWORD 至少需要 10 个字符")
     }
   }
 
@@ -126,6 +138,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     baseSyncMode,
     adminOpenIds: adminOpenIds.length > 0 ? adminOpenIds : ["demo-open-id"],
     bootstrapToken,
+    loginUser,
+    loginPassword,
+    displayName,
     oauthEnabled,
     sessionSecret: sessionSecret.length >= 16 ? sessionSecret : "demo-session-secret-not-for-production",
     sessionTtlMs: envNumber(env, "SESSION_TTL_MS", 12 * 3600 * 1000),

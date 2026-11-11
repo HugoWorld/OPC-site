@@ -342,6 +342,46 @@ t("签名会话可直接通过网关鉴权", async () => {
   assert.equal(JSON.parse(res.body).name, "HugoW")
 })
 
+/* ---------------- 管理员账号密码登录 ---------------- */
+
+t("账号密码登录未配置时返回 404", async () => {
+  const res = await createGateway(makeDeps())(
+    req("POST", "/api/auth/password", JSON.stringify({ username: "admin", password: "x" })),
+  )
+  assert.equal(res.status, 404)
+})
+
+t("账号密码不正确返回 401", async () => {
+  const deps = makeDeps({ loginUser: "admin", loginPassword: "correct-horse-battery" })
+  const res = await createGateway(deps)(
+    req("POST", "/api/auth/password", JSON.stringify({ username: "admin", password: "wrong" })),
+  )
+  assert.equal(res.status, 401)
+})
+
+t("账号密码正确下发可用会话", async () => {
+  const deps = makeDeps({
+    loginUser: "admin",
+    loginPassword: "correct-horse-battery",
+    displayName: "HugoW",
+  })
+  const res = await createGateway(deps)(
+    req(
+      "POST",
+      "/api/auth/password",
+      JSON.stringify({ username: "admin", password: "correct-horse-battery" }),
+    ),
+  )
+  assert.equal(res.status, 200)
+  const m = /sid=([^;]+)/.exec(res.headers["set-cookie"] ?? "")
+  assert.ok(m)
+  const me = await createGateway(deps)(
+    req("GET", "/api/auth/me", "", { cookie: "sid=" + m![1] }),
+  )
+  assert.equal(me.status, 200)
+  assert.equal(JSON.parse(me.body).source, "password")
+})
+
 /* ---------------- 限流 ---------------- */
 
 t("exchange 超过 10 次/分返回 429 且带 Retry-After", async () => {

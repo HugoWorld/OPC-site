@@ -15,8 +15,8 @@ export interface AdminUser {
   avatarUrl: string
   /** 展示用身份标识：完整 open_id 或「…尾号」。真实白名单在网关侧校验。 */
   openId: string
-  /** 登录来源：feishu = 真实飞书授权；demo = 演示模式；bootstrap = 部署令牌；mock 仅为历史缓存兼容 */
-  source: "mock" | "feishu" | "demo" | "bootstrap"
+  /** 登录来源：feishu = 真实飞书授权；demo = 演示模式；bootstrap = 部署令牌；password = 管理员账号密码 */
+  source: "mock" | "feishu" | "demo" | "bootstrap" | "password"
   /** 登录时间戳（毫秒） */
   loginAt: number
 }
@@ -62,7 +62,7 @@ export function loadSession(): AdminUser | null {
       avatarUrl: typeof u.avatarUrl === "string" ? u.avatarUrl : "",
       openId: u.openId,
       source:
-        u.source === "feishu" || u.source === "demo" || u.source === "bootstrap"
+        u.source === "feishu" || u.source === "demo" || u.source === "bootstrap" || u.source === "password"
           ? u.source
           : "mock",
       loginAt: u.loginAt,
@@ -79,7 +79,7 @@ export function signInFeishu(
     avatarUrl: string
     openId: string
   },
-  source: "feishu" | "demo" | "bootstrap" = "feishu",
+  source: "feishu" | "demo" | "bootstrap" | "password" = "feishu",
 ): AdminUser {
   const user: AdminUser = { ...info, source, loginAt: Date.now() }
   try {
@@ -134,7 +134,9 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
         ? "demo"
         : data.source === "bootstrap"
           ? "bootstrap"
-          : "feishu",
+          : data.source === "password"
+            ? "password"
+            : "feishu",
     )
   } catch {
     // 网关不可达时保留缓存，避免断网把用户直接踢出编辑界面。
@@ -146,6 +148,39 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
 export function startFeishuLogin(next = "/admin/") {
   const target = apiUrl(`/api/auth/start?next=${encodeURIComponent(next)}`)
   window.location.assign(target)
+}
+
+/** 取二维码 SDK 需要的授权地址（含 state），同时服务端会种下 oauth_state Cookie。 */
+export async function fetchFeishuQrUrl(next = "/admin/"): Promise<string> {
+  const res = await fetch(apiUrl(`/api/auth/qr?next=${encodeURIComponent(next)}`), {
+    credentials: "include",
+    headers: { accept: "application/json" },
+  })
+  const body = (await res.json().catch(() => null)) as { url?: string } | null
+  if (!res.ok || !body?.url) throw new Error("二维码生成失败，请重试")
+  return body.url
+}
+
+/** 管理员账号密码登录（备用入口）。 */
+export async function startPasswordLogin(
+  username: string,
+  password: string,
+  next = "/admin/",
+): Promise<void> {
+  const res = await fetch(apiUrl("/api/auth/password"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ username, password }),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as
+      | { error?: { code?: string; message?: string } }
+      | null
+    if (res.status === 429) throw new Error("登录尝试过于频繁，请稍后再试")
+    throw new Error(body?.error?.message ?? `登录失败（HTTP ${res.status}）`)
+  }
+  window.location.assign(`#${next}`)
 }
 
 /** 部署令牌登录：OAuth 不可用时，用服务端 ADMIN_BOOTSTRAP_TOKEN 换管理员会话。 */

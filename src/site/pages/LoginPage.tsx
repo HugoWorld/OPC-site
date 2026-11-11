@@ -1,11 +1,39 @@
 /* ------------------------------------------------------------------ */
-/* 运营工作台登录页：跳转飞书网页授权，不再提供模拟登录。                 */
+/* 运营工作台登录页：飞书扫码登录（主）+ 管理员账号密码（备用）。         */
+/* 页面不展示任何环境变量、内部字段、身份标识或数据源细节。               */
 /* ------------------------------------------------------------------ */
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 
-import { apiUrl, startBootstrapLogin, startDemoLogin, startFeishuLogin } from "@/site/admin/auth"
+import {
+  apiUrl,
+  fetchFeishuQrUrl,
+  startDemoLogin,
+  startFeishuLogin,
+  startPasswordLogin,
+} from "@/site/admin/auth"
+
+const QR_SDK_SRC =
+  "https://lf-package-cn.feishucdn.com/obj/feishu-static/lark/passport/qrcode/LarkSSOSDKWebQRCode-1.0.3.js"
+
+type QrLoginInstance = {
+  matchOrigin: (origin: string) => boolean
+  matchData: (data: unknown) => boolean
+}
+type QrLoginFactory = (options: {
+  id: string
+  goto: string
+  width?: string
+  height?: string
+  style?: string
+}) => QrLoginInstance
+
+declare global {
+  interface Window {
+    QRLogin?: QrLoginFactory
+  }
+}
 
 function readLoginQuery(): { next: string; error: string } {
   const raw = window.location.hash.replace(/^#/, "")
@@ -20,27 +48,60 @@ function readLoginQuery(): { next: string; error: string } {
 
 const ERROR_TEXT: Record<string, string> = {
   access_denied: "你在飞书授权页取消了授权，未进入工作台。",
-  state_mismatch: "登录校验失败（state 不匹配），请重新发起登录。",
+  state_mismatch: "登录校验失败，请重新扫码。",
   missing_code: "飞书没有返回授权码，请重新登录。",
-  not_allowed: "该飞书账号不在管理员白名单，请联系站点所有者添加。",
+  not_allowed: "该飞书账号没有工作台权限，请联系站点所有者。",
   rate_limited: "登录尝试过于频繁，请稍后再试。",
   upstream: "飞书授权服务暂时不可用，请稍后重试。",
-  oauth_config: "网关尚未配置飞书应用凭据，请先完成部署配置。",
-  demo_mode: "当前是演示模式，只跑通了访客站；配置飞书凭据后即可登录工作台。",
+  oauth_config: "飞书登录暂不可用，请使用管理员密码登录。",
+  demo_mode: "当前是演示模式，只开放演示工作台。",
 }
 
-/**
- * 真实登录：点击后跳到网关 /api/auth/start，由网关构造飞书授权页地址。
- * 授权成功回跳 /api/auth/callback，网关校验 open_id 白名单后下发 HttpOnly Cookie。
- */
+function loadQrSdk(): Promise<boolean> {
+  if (window.QRLogin) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const existing = document.querySelector<HTMLScriptElement>("script[data-feishu-qr]")
+    if (existing) {
+      if (existing.dataset.loaded === "1") {
+        resolve(Boolean(window.QRLogin))
+        return
+      }
+      existing.addEventListener("load", () => resolve(Boolean(window.QRLogin)), { once: true })
+      existing.addEventListener("error", () => resolve(false), { once: true })
+      return
+    }
+    const script = document.createElement("script")
+    script.src = QR_SDK_SRC
+    script.async = true
+    script.dataset.feishuQr = "1"
+    script.addEventListener(
+      "load",
+      () => {
+        script.dataset.loaded = "1"
+        resolve(Boolean(window.QRLogin))
+      },
+      { once: true },
+    )
+    script.addEventListener("error", () => resolve(false), { once: true })
+    document.head.appendChild(script)
+    window.setTimeout(() => resolve(Boolean(window.QRLogin)), 8000)
+  })
+}
+
 export function LoginPage() {
   const { next, error } = readLoginQuery()
   const [demoMode, setDemoMode] = useState(false)
-  const [bootstrapEnabled, setBootstrapEnabled] = useState(false)
-  const [oauthConfigured, setOauthConfigured] = useState(true)
-  const [bootstrapToken, setBootstrapToken] = useState("")
+  const [passwordEnabled, setPasswordEnabled] = useState(false)
+  const [oauthEnabled, setOauthEnabled] = useState(true)
+  const [mode, setMode] = useState<"qr" | "password">("qr")
+  const [qrReady, setQrReady] = useState(false)
+  const [qrFailed, setQrFailed] = useState(false)
+  const [qrKey, setQrKey] = useState(0)
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState("")
+  const qrContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -49,59 +110,108 @@ export function LoginPage() {
       .then(
         (
           body:
-            | { demoMode?: boolean; bootstrapEnabled?: boolean; oauthConfigured?: boolean }
+            | {
+                demoMode?: boolean
+                passwordEnabled?: boolean
+                oauthConfigured?: boolean
+              }
             | null,
         ) => {
           if (!alive || !body) return
           if (body.demoMode) setDemoMode(true)
-          if (body.bootstrapEnabled) setBootstrapEnabled(true)
-          if (body.oauthConfigured === false) setOauthConfigured(false)
+          if (body.passwordEnabled) setPasswordEnabled(true)
+          if (body.oauthConfigured === false) setOauthEnabled(false)
         },
       )
       .catch(() => {
-        /* 网关未启动时保持默认，不影响页面展示 */
+        /* 网关未启动时保留默认，页面不暴露内部状态 */
       })
     return () => {
       alive = false
     }
   }, [])
 
-  const bootstrapMode = !demoMode && bootstrapEnabled && !oauthConfigured
+  useEffect(() => {
+    if (demoMode || !oauthEnabled || mode !== "qr") return
+    let cancelled = false
+    let qr: QrLoginInstance | null = null
+    let timer = 0
+    setQrReady(false)
+    setQrFailed(false)
 
-  const onLogin = () => {
-    if (demoMode) {
-      setBusy(true)
-      setActionError("")
-      void startDemoLogin(next)
-        .catch((e: unknown) => {
-          setActionError(e instanceof Error ? e.message : "演示登录失败，请重试")
+    const run = async () => {
+      try {
+        const goto = await fetchFeishuQrUrl(next)
+        if (cancelled) return
+        const sdkOk = await loadQrSdk()
+        if (cancelled) return
+        if (!sdkOk || !window.QRLogin || !qrContainerRef.current) {
+          setQrFailed(true)
+          return
+        }
+        qr = window.QRLogin({
+          id: "feishu-qr-container",
+          goto,
+          width: "260",
+          height: "260",
+          style: "width:260px;height:260px;",
         })
-        .finally(() => setBusy(false))
-      return
-    }
-    if (bootstrapMode) {
-      if (!bootstrapToken.trim()) {
-        setActionError("请先填写管理员登录令牌")
-        return
+        setQrReady(true)
+
+        const onMessage = (event: MessageEvent) => {
+          if (!qr || !qr.matchOrigin(event.origin) || !qr.matchData(event.data)) return
+          const tmpCode = (event.data as { tmp_code?: string }).tmp_code
+          if (!tmpCode) return
+          const target = new URL(goto)
+          target.searchParams.set("tmp_code", tmpCode)
+          window.location.assign(target.toString())
+        }
+        window.addEventListener("message", onMessage)
+        timer = window.setTimeout(() => {
+          window.removeEventListener("message", onMessage)
+        }, 5 * 60 * 1000)
+      } catch {
+        if (!cancelled) setQrFailed(true)
       }
-      setBusy(true)
-      setActionError("")
-      void startBootstrapLogin(bootstrapToken.trim(), next)
-        .catch((e: unknown) => {
-          setActionError(e instanceof Error ? e.message : "管理员登录令牌验证失败，请重试")
-        })
-        .finally(() => setBusy(false))
+    }
+    void run()
+
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [demoMode, oauthEnabled, mode, next, qrKey])
+
+  const onDemoLogin = () => {
+    setBusy(true)
+    setActionError("")
+    void startDemoLogin(next)
+      .catch((e: unknown) => {
+        setActionError(e instanceof Error ? e.message : "演示登录失败，请重试")
+      })
+      .finally(() => setBusy(false))
+  }
+
+  const onPasswordLogin = () => {
+    if (!username.trim() || !password.trim()) {
+      setActionError("请填写账号和密码")
       return
     }
-    startFeishuLogin(next)
+    setBusy(true)
+    setActionError("")
+    void startPasswordLogin(username.trim(), password, next)
+      .catch((e: unknown) => {
+        setActionError(e instanceof Error ? e.message : "登录失败，请重试")
+      })
+      .finally(() => setBusy(false))
   }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <div aria-hidden className="ambient pointer-events-none absolute inset-0 -z-10" />
-      <div className="mx-auto grid w-full max-w-[980px] items-center gap-10 px-6 py-14 md:grid-cols-[1.05fr_0.95fr] md:py-20">
-        {/* 左：说明 */}
-        <div className="max-w-[460px]">
+      <div className="mx-auto grid w-full max-w-[1000px] items-center gap-12 px-6 py-14 md:grid-cols-[1.02fr_0.98fr] md:py-20">
+        {/* 左：品牌与说明 */}
+        <div className="max-w-[440px]">
           <Link to="/" className="inline-flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-primary text-[13px] font-bold text-primary-foreground">
               H
@@ -112,19 +222,18 @@ export function LoginPage() {
             </span>
           </Link>
 
-          <h1 className="mt-9 text-[clamp(1.7rem,3.4vw,2.3rem)] font-extrabold leading-[1.15] tracking-[-0.02em] text-balance">
+          <h1 className="mt-9 text-[clamp(1.75rem,3.6vw,2.5rem)] font-extrabold leading-[1.12] tracking-[-0.02em] text-balance">
             登录运营工作台
           </h1>
-          <p className="mt-3 max-w-[42ch] text-[14px] leading-relaxed text-muted-foreground">
-            站点内容与外观的统一编辑入口。工作台仅对管理员开放，使用飞书账号登录，
-            不再单独维护一套账号密码。
+          <p className="mt-4 max-w-[36ch] text-[14px] leading-relaxed text-muted-foreground">
+            编辑站点内容与外观，发布后即刻同步到前台和飞书多维表格。
           </p>
 
-          <ul className="mt-7 space-y-2.5 text-[13px] text-muted-foreground">
+          <ul className="mt-7 space-y-3 text-[13px] text-muted-foreground">
             {[
-              "头像、姓名取自飞书用户信息，不用另传",
-              "open_id 由网关校验管理员白名单，不落在前端",
-              "会话走 HttpOnly Cookie，退出登录立即撤销",
+              "内容、页面与主题统一编辑",
+              "发布后自动写入飞书多维表格",
+              "登录状态由服务端安全会话维护",
             ].map((t) => (
               <li key={t} className="flex items-start gap-2.5">
                 <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
@@ -136,120 +245,186 @@ export function LoginPage() {
 
         {/* 右：登录卡 */}
         <div className="glass-card rounded-2xl p-6 sm:p-7">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold">管理员登录</span>
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              {bootstrapMode ? "管理员登录令牌" : "飞书授权登录"}
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[14px] font-semibold">管理员登录</div>
+              <div className="mt-1 text-[12px] text-muted-foreground">
+                使用飞书扫码，或使用管理员账号密码
+              </div>
+            </div>
+            {!demoMode ? (
+              <div className="flex rounded-lg border border-border bg-muted/50 p-0.5 text-[11.5px]">
+                <button
+                  type="button"
+                  onClick={() => setMode("qr")}
+                  className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                    mode === "qr" ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground"
+                  }`}
+                >
+                  扫码登录
+                </button>
+                {passwordEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setMode("password")}
+                    className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                      mode === "password"
+                        ? "bg-background font-semibold text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    账号密码
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {error ? (
             <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800">
-              {ERROR_TEXT[error] ?? `登录未完成（${error}），请重试。`}
+              {ERROR_TEXT[error] ?? "登录未完成，请重试。"}
             </p>
           ) : null}
 
           {demoMode ? (
-            <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800">
-              当前是演示模式：可以点下面的按钮进入演示工作台，数据只存在本机；
-              要改用真实飞书账号，填好
-              <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
-                .env
-              </code>
-              里的飞书 4 项，把
-              <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
-                HUGOW_DEMO
-              </code>
-              改成 0，再重启即可。
-            </p>
-          ) : null}
-
-          {bootstrapMode ? (
-            <div className="mt-4 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-sky-900">
-              当前未启用飞书 OAuth。请使用部署时写入
-              <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
-                ADMIN_BOOTSTRAP_TOKEN
-              </code>
-              的管理员登录令牌进入工作台。这不是给客户的授权码，只用于站点所有者登录，且不会写入浏览器存储。
-              <input
-                type="password"
-                value={bootstrapToken}
-                onChange={(e) => setBootstrapToken(e.target.value)}
-                placeholder="管理员登录令牌"
-                autoComplete="current-password"
-                className="mt-3 h-10 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
-              />
+            <div className="mt-5">
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800">
+                当前是演示模式，只开放演示工作台，数据仅保存在本机。
+              </p>
+              <button
+                type="button"
+                onClick={onDemoLogin}
+                disabled={busy}
+                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-primary text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? "正在进入…" : "进入演示工作台"}
+              </button>
             </div>
-          ) : null}
+          ) : mode === "qr" ? (
+            <div className="mt-5">
+              {oauthEnabled ? (
+                <>
+                  <div className="relative mx-auto flex h-[268px] w-[268px] items-center justify-center rounded-2xl border border-border bg-background">
+                    <div id="feishu-qr-container" ref={qrContainerRef} className="grid place-items-center" />
+                    {!qrReady && !qrFailed ? (
+                      <div className="absolute inset-0 grid place-items-center rounded-2xl bg-background/85 text-[12px] text-muted-foreground">
+                        正在生成二维码…
+                      </div>
+                    ) : null}
+                    {qrFailed ? (
+                      <div className="absolute inset-0 grid place-items-center gap-2 rounded-2xl bg-background px-6 text-center">
+                        <div className="text-[12.5px] text-muted-foreground">二维码加载失败</div>
+                        <button
+                          type="button"
+                          onClick={() => setQrKey((k) => k + 1)}
+                          className="rounded-md border border-border px-3 py-1.5 text-[12px] text-foreground hover:bg-muted"
+                        >
+                          重新加载
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-center text-[12px] leading-relaxed text-muted-foreground">
+                    打开飞书 App 扫一扫，确认后自动进入工作台
+                  </p>
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setQrKey((k) => k + 1)}
+                      className="h-10 flex-1 rounded-lg border border-border text-[12.5px] text-foreground transition-colors hover:bg-muted"
+                    >
+                      刷新二维码
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startFeishuLogin(next)}
+                      className="h-10 flex-1 rounded-lg border border-border text-[12.5px] text-foreground transition-colors hover:bg-muted"
+                    >
+                      在飞书中打开
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-border bg-muted/40 p-5 text-center">
+                  <div className="text-[13px] font-medium">飞书登录尚未开通</div>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                    请使用管理员账号密码登录，或联系站点所有者开通飞书登录。
+                  </p>
+                  {passwordEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => setMode("password")}
+                      className="mt-4 h-10 w-full rounded-lg bg-primary text-[13px] font-semibold text-primary-foreground"
+                    >
+                      使用账号密码登录
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-5">
+              <label className="block text-[12px] font-medium text-muted-foreground" htmlFor="admin-username">
+                账号
+              </label>
+              <input
+                id="admin-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                placeholder="请输入管理员账号"
+                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
+              />
+              <label
+                className="mt-4 block text-[12px] font-medium text-muted-foreground"
+                htmlFor="admin-password"
+              >
+                密码
+              </label>
+              <input
+                id="admin-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder="请输入管理员密码"
+                className="mt-1.5 h-11 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary"
+              />
+              {actionError ? (
+                <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-red-700">
+                  {actionError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={onPasswordLogin}
+                disabled={busy}
+                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-primary text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? "正在进入…" : "登录工作台"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("qr")}
+                className="mt-3 h-9 w-full text-[12px] text-muted-foreground hover:text-foreground"
+              >
+                返回扫码登录
+              </button>
+            </div>
+          )}
 
-          {actionError ? (
+          {actionError && mode !== "password" ? (
             <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-red-700">
               {actionError}
             </p>
           ) : null}
 
-          <button
-            type="button"
-            onClick={onLogin}
-            disabled={busy}
-            className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#3370ff] text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <span className="grid size-5 place-items-center rounded bg-white/15 text-[11px] font-bold">
-              {bootstrapMode ? "令" : "飞"}
-            </span>
-            {busy
-              ? "正在进入…"
-              : demoMode
-                ? "进入演示工作台"
-                : bootstrapMode
-                  ? "用管理员令牌进入"
-                  : "使用飞书账号登录"}
-          </button>
-
-          {demoMode ? (
-            <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-              演示会话由网关签发，退出登录即失效；不会读取或写入飞书账号。
-            </p>
-          ) : null}
-
-          <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-            {demoMode
-              ? "演示模式不跳转飞书，只签发一个仅本机有效的演示会话；改回真实登录后，这里才会跳转飞书授权页。"
-              : bootstrapMode
-                ? "管理员登录令牌由服务端环境变量提供，不是客户授权码；登录后签发 HttpOnly 会话，飞书 OAuth 恢复后会自动切回飞书授权登录。"
-                : "点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的"}
-            {!demoMode && !bootstrapMode ? (
-              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground/80">
-                ADMIN_OPEN_IDS
-              </code>
-            ) : null}
-            {!demoMode && !bootstrapMode ? "白名单。" : ""}
-          </p>
-
-          <div className="mt-6 rounded-xl border border-border bg-muted/40 p-4">
-            <div className="text-[12px] font-semibold text-foreground">登录后将获取的字段</div>
-            <div className="mt-3 space-y-2 text-[12px] text-muted-foreground">
-              {[
-                ["头像", "avatar_url"],
-                ["姓名", "name"],
-                ["身份标识", "open_id"],
-                ["会话", "HttpOnly Cookie"],
-              ].map(([label, field]) => (
-                <div key={field} className="flex items-center justify-between gap-3">
-                  <span>{label}</span>
-                  <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[11px] text-foreground/80">
-                    {field}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-2 text-[12px]">
+          <div className="mt-6 flex items-center justify-between gap-2 border-t border-border pt-4 text-[12px]">
             <Link to="/" className="text-muted-foreground hover:text-foreground">
               返回站点前台
             </Link>
-            <span className="text-muted-foreground">数据源：飞书多维表格 + 本机快照</span>
+            <span className="text-muted-foreground">仅限管理员访问</span>
           </div>
         </div>
       </div>

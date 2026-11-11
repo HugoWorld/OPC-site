@@ -14,7 +14,7 @@ import {
   type GatewayResponse,
 } from "./gateway.ts"
 import { loadConfig } from "./config.ts"
-import { createFeishuClient, buildFeishuAuthorizeUrl } from "./feishu-client.ts"
+import { createFeishuClient, buildFeishuAuthorizeUrl, buildFeishuLegacyAuthorizeUrl } from "./feishu-client.ts"
 import { FeishuBitable } from "./feishu-bitable.ts"
 import { createFeishuPublisher, parseTableIds } from "./feishu-publisher.ts"
 import { createLocalSnapshotService } from "./local-snapshot.ts"
@@ -82,6 +82,9 @@ async function main(): Promise<void> {
     secureCookies: config.secureCookies,
     demoMode: config.demoMode,
     bootstrapToken: config.bootstrapToken,
+    loginUser: config.loginUser,
+    loginPassword: config.loginPassword,
+    displayName: config.displayName,
     publicAdminOrigin: config.publicAdminOrigin,
     adminEntryPath: config.adminEntryPath,
     oauth:
@@ -96,6 +99,13 @@ async function main(): Promise<void> {
               state,
               scope: config.oauthScope,
               accountsBase: config.feishuAccountsBaseUrl,
+            }),
+          qrAuthorizeUrl: (state, redirectUri) =>
+            buildFeishuLegacyAuthorizeUrl({
+              appId: config.appId,
+              redirectUri,
+              state,
+              scope: config.oauthScope,
             }),
         },
   })

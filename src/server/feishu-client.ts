@@ -133,3 +133,15 @@ export function buildFeishuAuthorizeUrl(opts: AuthorizeUrlOptions): string {
   if (scope) url.searchParams.set("scope", scope)
   return url.toString()
 }
+
+/** 飞书二维码 SDK 只支持旧版授权页，需走 passport 域名。 */
+export function buildFeishuLegacyAuthorizeUrl(opts: AuthorizeUrlOptions): string {
+  const url = new URL("https://passport.feishu.cn/suite/passport/oauth/authorize")
+  url.searchParams.set("client_id", opts.appId)
+  url.searchParams.set("redirect_uri", opts.redirectUri)
+  url.searchParams.set("response_type", "code")
+  url.searchParams.set("state", opts.state)
+  const scope = (opts.scope ?? "").trim()
+  if (scope) url.searchParams.set("scope", scope)
+  return url.toString()
+}

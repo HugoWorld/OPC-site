@@ -36,6 +36,8 @@ export interface SessionPayload {
   demo?: boolean
   /** 部署令牌会话：仅用于 OAuth 不可用时的运维登录，审计上单独标记 */
   bootstrap?: boolean
+  /** 管理员账号密码会话：仅用于备用登录入口 */
+  password?: boolean
 }
 
 export interface SessionStore {
@@ -57,6 +59,8 @@ export interface GatewayOAuth {
   redirectUri: string
   /** 构造飞书授权页地址（注入实现，网关不依赖具体域名常量） */
   authorizeUrl: (state: string, redirectUri: string) => string
+  /** 二维码 SDK 专用的旧版授权页地址；缺省时复用 authorizeUrl */
+  qrAuthorizeUrl?: (state: string, redirectUri: string) => string
 }
 
 export interface GatewayDeps {
@@ -82,6 +86,10 @@ export interface GatewayDeps {
   demoMode?: boolean
   /** 部署引导令牌：OAuth 不可用时用固定令牌换管理员会话；空=关闭该入口 */
   bootstrapToken?: string
+  /** 管理员账号密码登录：用户名 / 密码（密码为空则关闭该入口） */
+  loginUser?: string
+  loginPassword?: string
+  displayName?: string
 }
 
 export interface RateLimitRules {
@@ -398,6 +406,50 @@ export function createGateway(deps: GatewayDeps) {
       }
     }
 
+    /* POST /api/auth/password：管理员账号密码登录（备用入口）。
+     * 用户名/密码均来自服务端环境变量；密码为空时该端点不存在。
+     * 密码比较前先做定长摘要，避免长度侧信道；失败按 IP 计入登录限流。 */
+    if (path === "/api/auth/password" && method === "POST") {
+      const expectedPassword = deps.loginPassword ?? ""
+      if (deps.demoMode || !expectedPassword) {
+        return error(404, "NOT_FOUND", "账号密码登录未启用")
+      }
+      const body = parseBody(req.bodyText)
+      if (!body) return error(400, "BAD_REQUEST", "请求体不是合法 JSON")
+      const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
+      if (!gate.allowed) return tooMany(gate.retryAfterMs)
+      const suppliedUser = typeof body.username === "string" ? body.username : ""
+      const suppliedPassword = typeof body.password === "string" ? body.password : ""
+      const expectedUser = deps.loginUser ?? "admin"
+      const a = Buffer.from(suppliedPassword)
+      const b = Buffer.from(expectedPassword)
+      const matched = a.length === b.length && timingSafeEqual(a, b)
+      if (suppliedUser !== expectedUser || !matched) {
+        return error(401, "INVALID_CREDENTIALS", "账号或密码不正确")
+      }
+      const now = Date.now()
+      const session: SessionPayload = {
+        openId: deps.adminOpenIds[0],
+        name: deps.displayName ?? "HugoW",
+        avatarUrl: "",
+        createdAt: now,
+        expiresAt: now + deps.sessionTtlMs,
+        password: true,
+      }
+      const sid = await deps.sessions.create(session)
+      return json(
+        200,
+        {
+          name: session.name,
+          avatarUrl: session.avatarUrl,
+          openIdSuffix: maskOpenId(session.openId),
+          expiresAt: session.expiresAt,
+          source: "password",
+        },
+        { "set-cookie": sessionCookie(sid, deps.secureCookies ?? true) },
+      )
+    }
+
     /* POST /api/auth/bootstrap：OAuth 不可用时的部署令牌登录。
      * 只在服务端配置了 ADMIN_BOOTSTRAP_TOKEN 且非演示模式时开放；
      * 令牌比较用 timingSafeEqual，失败按 IP 计入登录限流。 */
@@ -465,6 +517,31 @@ export function createGateway(deps: GatewayDeps) {
       )
     }
 
+    /* GET /api/auth/qr：返回飞书二维码 SDK 所需的授权地址，并种下 oauth_state。
+     * 二维码在页面内渲染，扫码确认后由飞书回调 /api/auth/callback。 */
+    if (path === "/api/auth/qr" && method === "GET") {
+      if (deps.demoMode) return error(503, "DEMO_MODE", "当前是演示模式")
+      if (!deps.oauth) return error(501, "OAUTH_NOT_CONFIGURED", "未配置飞书 OAuth")
+      const qIndex = req.url.indexOf("?")
+      const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
+      const next = safeNext(qs?.get("next"))
+      const state = encodeState(next)
+      try {
+        const url = (deps.oauth.qrAuthorizeUrl ?? deps.oauth.authorizeUrl)(
+          state,
+          deps.oauth.redirectUri,
+        )
+        return json(
+          200,
+          { url, redirectUri: deps.oauth.redirectUri },
+          { "set-cookie": oauthStateCookie(state, deps.secureCookies ?? true) },
+        )
+      } catch (e) {
+        console.error("[gateway] oauth qr failed:", e instanceof Error ? e.message : e)
+        return error(502, "OAUTH_CONFIG", "飞书授权地址生成失败")
+      }
+    }
+
     /* GET /api/auth/start：浏览器跳到飞书授权页，state 用签名前的随机值 + 回跳路径。 */
     if (path === "/api/auth/start" && method === "GET") {
       if (deps.demoMode) {
@@ -495,7 +572,13 @@ export function createGateway(deps: GatewayDeps) {
         avatarUrl: auth.session.avatarUrl,
         openIdSuffix: maskOpenId(auth.session.openId),
         expiresAt: auth.session.expiresAt,
-        source: auth.session.demo ? "demo" : auth.session.bootstrap ? "bootstrap" : "feishu",
+        source: auth.session.demo
+          ? "demo"
+          : auth.session.bootstrap
+            ? "bootstrap"
+            : auth.session.password
+              ? "password"
+              : "feishu",
       })
     }
 
@@ -562,6 +645,7 @@ export function createGateway(deps: GatewayDeps) {
         secureCookies: deps.secureCookies ?? true,
         demoMode: Boolean(deps.demoMode),
         bootstrapEnabled: Boolean(deps.bootstrapToken) && !deps.demoMode,
+        passwordEnabled: Boolean(deps.loginPassword) && !deps.demoMode,
       })
     }
 

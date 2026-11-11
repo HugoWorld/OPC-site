@@ -87,6 +87,19 @@ if ! grep -q '^ADMIN_BOOTSTRAP_TOKEN=.\+' .env; then
   fi
 fi
 
+# 管理员账号密码：飞书扫码不可用时的备用入口；已存在非空值则保留。
+login_password="$(openssl rand -hex 8 2>/dev/null || true)"
+if [ -z "$login_password" ]; then
+  login_password="$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+fi
+if ! grep -q '^ADMIN_LOGIN_PASSWORD=.\+' .env; then
+  if grep -q '^ADMIN_LOGIN_PASSWORD=' .env; then
+    sed -i "s|^ADMIN_LOGIN_PASSWORD=.*|ADMIN_LOGIN_PASSWORD=${login_password}|" .env
+  else
+    printf 'ADMIN_LOGIN_PASSWORD=%s\n' "$login_password" >> .env
+  fi
+fi
+
 set_env() {
   local key="$1" value="$2"
   if grep -q "^${key}=" .env; then
@@ -165,12 +178,16 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 say "5/5 完成"
+login_password="$(grep '^ADMIN_LOGIN_PASSWORD=' .env | cut -d= -f2- || true)"
+bootstrap="$(grep '^ADMIN_BOOTSTRAP_TOKEN=' .env | cut -d= -f2- || true)"
 cat <<EOF
 
 访客站：   http://127.0.0.1:${www_port}
 工作台：   http://127.0.0.1:${admin_port}
 健康检查： http://127.0.0.1:${admin_port}/api/health
-部署令牌： ${bootstrap}   （OAuth 不可用时，在登录页填写它进入工作台）
+管理员账号： $(grep '^ADMIN_LOGIN_USER=' .env | cut -d= -f2- || echo admin)
+管理员密码： ${login_password}   （飞书扫码不可用时的备用入口，可改 .env 后重启）
+部署令牌： ${bootstrap}   （仅应急运维用；OAuth 可用后可在 .env 中置空）
 
 常用命令：
   ./hugow status     查看状态
