@@ -246,8 +246,7 @@ export function AdminLoginGate() {
         </span>
         <h1 className="mt-4 text-[18px] font-semibold">运营工作台需要登录</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          工作台仅对管理员开放。使用飞书账号登录后，网关会校验 open_id 白名单并下发
-          HttpOnly 会话 Cookie；未登录时不会加载任何编辑数据。
+          工作台仅对管理员开放。请先登录；未登录时不会加载任何编辑数据。
         </p>
         <a
           href="#/login/?next=/admin/"

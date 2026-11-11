@@ -26,12 +26,10 @@ import {
 import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { AdminLoginGate, fetchSession, loadSession, shortOpenId, signOutRemote } from "@/site/admin/auth"
+import { AdminLoginGate, fetchSession, loadSession, signOutRemote } from "@/site/admin/auth"
 import {
   ACCENT2_PRESETS,
   ACCENT_PRESETS,
-  DRAFT_KEY,
-  PUBLISHED_KEY,
   useSiteStore,
   type EditableData,
   type SliceKey,
@@ -588,10 +586,9 @@ function Overview() {
               {hasDraftChanges ? "有草稿未发布" : "草稿与站点一致"}
             </div>
             <div className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-              草稿键 {DRAFT_KEY} · 已发布键 {PUBLISHED_KEY}
-              {lastDraftSavedAt
+              所有修改自动保存{lastDraftSavedAt
                 ? ` · 草稿最后保存 ${new Date(lastDraftSavedAt).toLocaleTimeString()}`
-                : " · 尚无草稿修改"}
+                : ""}
               {lastPublishedAt ? ` · 上次发布 ${new Date(lastPublishedAt).toLocaleTimeString()}` : ""}
             </div>
           </div>
@@ -1256,7 +1253,7 @@ export function AdminPage() {
             </span>
             <span className="text-[14px] font-semibold">运营工作台</span>
             <span className="hidden text-[12px] text-muted-foreground sm:inline">
-              HugoW个人门户 · 飞书后端
+              HugoW个人门户
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1304,9 +1301,7 @@ export function AdminPage() {
               </span>
               <span className="hidden leading-tight sm:block">
                 <span className="block text-[12px] font-semibold">{user.name}</span>
-                <span className="block text-[10.5px] text-muted-foreground">
-                  飞书 · {shortOpenId(user.openId)}
-                </span>
+                <span className="block text-[10.5px] text-muted-foreground">管理员</span>
               </span>
               <button
                 type="button"

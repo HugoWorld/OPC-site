@@ -25,7 +25,7 @@ export function SetupChecklist() {
           <div>
             <div className="text-[14.5px] font-semibold text-emerald-700">初始化已完成</div>
             <div className="text-[12px] text-muted-foreground">
-              数据后端：飞书多维表格（12 张表）· 网关托管 App Secret
+              内容与发布配置已就绪
             </div>
             <div className="mt-0.5 text-[11.5px] text-muted-foreground">
               接下来：在左侧模块补内容 → 右侧预览 → 点「发布」让前台生效

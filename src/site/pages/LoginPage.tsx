@@ -226,13 +226,13 @@ export function LoginPage() {
             登录运营工作台
           </h1>
           <p className="mt-4 max-w-[36ch] text-[14px] leading-relaxed text-muted-foreground">
-            编辑站点内容与外观，发布后即刻同步到前台和飞书多维表格。
+            编辑站点内容与外观，发布后即刻同步到前台。
           </p>
 
           <ul className="mt-7 space-y-3 text-[13px] text-muted-foreground">
             {[
               "内容、页面与主题统一编辑",
-              "发布后自动写入飞书多维表格",
+              "发布后自动同步线上内容",
               "登录状态由服务端安全会话维护",
             ].map((t) => (
               <li key={t} className="flex items-start gap-2.5">
@@ -249,7 +249,7 @@ export function LoginPage() {
             <div>
               <div className="text-[14px] font-semibold">管理员登录</div>
               <div className="mt-1 text-[12px] text-muted-foreground">
-                使用飞书扫码，或使用管理员账号密码
+                飞书扫码，或用账号密码
               </div>
             </div>
             {!demoMode ? (
@@ -257,7 +257,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setMode("qr")}
-                  className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                  className={`whitespace-nowrap rounded-md px-2.5 py-1.5 transition-colors ${
                     mode === "qr" ? "bg-background font-semibold text-foreground shadow-sm" : "text-muted-foreground"
                   }`}
                 >
@@ -267,7 +267,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setMode("password")}
-                    className={`rounded-md px-2.5 py-1.5 transition-colors ${
+                    className={`whitespace-nowrap rounded-md px-2.5 py-1.5 transition-colors ${
                       mode === "password"
                         ? "bg-background font-semibold text-foreground shadow-sm"
                         : "text-muted-foreground"
