@@ -31,6 +31,8 @@ export interface SessionPayload {
   avatarUrl: string
   createdAt: number
   expiresAt: number
+  /** 演示模式会话：仅在 deps.demoMode 为真时被 authenticate 接受 */
+  demo?: boolean
 }
 
 export interface SessionStore {
@@ -254,6 +256,13 @@ async function authenticate(
     await deps.sessions.destroy(sid)
     return { ok: false, response: error(401, "AUTH_REQUIRED", "会话已过期") }
   }
+  // 演示会话只在 demoMode 开启期间有效；关掉演示模式后旧 Cookie 立即失效。
+  if (session.demo) {
+    if (!deps.demoMode) {
+      return { ok: false, response: error(401, "AUTH_REQUIRED", "演示会话已失效") }
+    }
+    return { ok: true, session, sid }
+  }
   if (!deps.adminOpenIds.includes(session.openId)) {
     return { ok: false, response: error(403, "NOT_ALLOWED", "账号不在管理员白名单") }
   }
@@ -384,6 +393,33 @@ export function createGateway(deps: GatewayDeps) {
       }
     }
 
+    /* POST /api/auth/demo：演示模式下的一次性管理员入口。
+     * 只在 HUGOW_DEMO=1 时开放；真实部署关掉演示模式后此端点直接 404。 */
+    if (path === "/api/auth/demo" && method === "POST") {
+      if (!deps.demoMode) return error(404, "NOT_FOUND", "演示登录未启用")
+      const now = Date.now()
+      const session: SessionPayload = {
+        openId: "demo_local_admin",
+        name: "HugoW（演示）",
+        avatarUrl: "",
+        createdAt: now,
+        expiresAt: now + deps.sessionTtlMs,
+        demo: true,
+      }
+      const sid = await deps.sessions.create(session)
+      return json(
+        200,
+        {
+          name: session.name,
+          avatarUrl: session.avatarUrl,
+          openIdSuffix: "demo",
+          expiresAt: session.expiresAt,
+          source: "demo",
+        },
+        { "set-cookie": sessionCookie(sid, deps.secureCookies ?? true) },
+      )
+    }
+
     /* GET /api/auth/start：浏览器跳到飞书授权页，state 用签名前的随机值 + 回跳路径。 */
     if (path === "/api/auth/start" && method === "GET") {
       if (deps.demoMode) {
@@ -414,7 +450,7 @@ export function createGateway(deps: GatewayDeps) {
         avatarUrl: auth.session.avatarUrl,
         openIdSuffix: maskOpenId(auth.session.openId),
         expiresAt: auth.session.expiresAt,
-        source: "feishu",
+        source: auth.session.demo ? "demo" : "feishu",
       })
     }
 

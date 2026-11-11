@@ -15,8 +15,8 @@ export interface AdminUser {
   avatarUrl: string
   /** 展示用身份标识：完整 open_id 或「…尾号」。真实白名单在网关侧校验。 */
   openId: string
-  /** 登录来源：feishu = 真实飞书授权；mock 仅为历史缓存兼容 */
-  source: "mock" | "feishu"
+  /** 登录来源：feishu = 真实飞书授权；demo = 演示模式；mock 仅为历史缓存兼容 */
+  source: "mock" | "feishu" | "demo"
   /** 登录时间戳（毫秒） */
   loginAt: number
 }
@@ -61,7 +61,7 @@ export function loadSession(): AdminUser | null {
       name: u.name,
       avatarUrl: typeof u.avatarUrl === "string" ? u.avatarUrl : "",
       openId: u.openId,
-      source: u.source === "feishu" ? "feishu" : "mock",
+      source: u.source === "feishu" || u.source === "demo" ? u.source : "mock",
       loginAt: u.loginAt,
     }
   } catch {
@@ -69,13 +69,16 @@ export function loadSession(): AdminUser | null {
   }
 }
 
-/** 用网关 /api/auth/me 的用户信息写入本地展示缓存。 */
-export function signInFeishu(info: {
-  name: string
-  avatarUrl: string
-  openId: string
-}): AdminUser {
-  const user: AdminUser = { ...info, source: "feishu", loginAt: Date.now() }
+/** 用网关 /api/auth/me 或演示登录的用户信息写入本地展示缓存。 */
+export function signInFeishu(
+  info: {
+    name: string
+    avatarUrl: string
+    openId: string
+  },
+  source: "feishu" | "demo" = "feishu",
+): AdminUser {
+  const user: AdminUser = { ...info, source, loginAt: Date.now() }
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify(user))
   } catch {
@@ -98,7 +101,6 @@ interface MeResponse {
   openIdSuffix?: string
   source?: string
 }
-
 /**
  * 以 Cookie 为准刷新登录态：命中返回用户并写缓存，401/403 清缓存返回 null。
  * AdminPage 挂载时调用，避免「本地有缓存但服务端会话已过期」的假登录。
@@ -119,11 +121,14 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
       signOut()
       return null
     }
-    return signInFeishu({
-      name: data.name,
-      avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : "",
-      openId: typeof data.openIdSuffix === "string" ? data.openIdSuffix : "…",
-    })
+    return signInFeishu(
+      {
+        name: data.name,
+        avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : "",
+        openId: typeof data.openIdSuffix === "string" ? data.openIdSuffix : "…",
+      },
+      data.source === "demo" ? "demo" : "feishu",
+    )
   } catch {
     // 网关不可达时保留缓存，避免断网把用户直接踢出编辑界面。
     return loadSession()
@@ -134,6 +139,19 @@ export async function fetchSession(signal?: AbortSignal): Promise<AdminUser | nu
 export function startFeishuLogin(next = "/admin/") {
   const target = apiUrl(`/api/auth/start?next=${encodeURIComponent(next)}`)
   window.location.assign(target)
+}
+
+/** 演示模式专用：向网关换取演示会话 Cookie，再进入工作台。 */
+export async function startDemoLogin(next = "/admin/"): Promise<void> {
+  const res = await fetch(apiUrl("/api/auth/demo"), {
+    method: "POST",
+    credentials: "include",
+    headers: { accept: "application/json" },
+  })
+  if (!res.ok) {
+    throw new Error(`演示登录失败（HTTP ${res.status}）`)
+  }
+  window.location.assign(`#${next}`)
 }
 
 /** 通知服务端撤销会话（清 HttpOnly Cookie），再清本地展示缓存。 */

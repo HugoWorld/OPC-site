@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 
-import { apiUrl, startFeishuLogin } from "@/site/admin/auth"
+import { apiUrl, startDemoLogin, startFeishuLogin } from "@/site/admin/auth"
 
 function readLoginQuery(): { next: string; error: string } {
   const raw = window.location.hash.replace(/^#/, "")
@@ -36,6 +36,8 @@ const ERROR_TEXT: Record<string, string> = {
 export function LoginPage() {
   const { next, error } = readLoginQuery()
   const [demoMode, setDemoMode] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState("")
 
   useEffect(() => {
     let alive = true
@@ -51,6 +53,20 @@ export function LoginPage() {
       alive = false
     }
   }, [])
+
+  const onLogin = () => {
+    if (!demoMode) {
+      startFeishuLogin(next)
+      return
+    }
+    setBusy(true)
+    setActionError("")
+    void startDemoLogin(next)
+      .catch((e: unknown) => {
+        setActionError(e instanceof Error ? e.message : "演示登录失败，请重试")
+      })
+      .finally(() => setBusy(false))
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -107,7 +123,8 @@ export function LoginPage() {
 
           {demoMode ? (
             <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800">
-              当前是演示模式：访客站已经跑通，工作台登录未启用。填好
+              当前是演示模式：可以点下面的按钮进入演示工作台，数据只存在本机；
+              要改用真实飞书账号，填好
               <code className="mx-1 rounded bg-background/60 px-1 py-0.5 font-mono text-[11px]">
                 .env
               </code>
@@ -119,23 +136,38 @@ export function LoginPage() {
             </p>
           ) : null}
 
+          {actionError ? (
+            <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-red-700">
+              {actionError}
+            </p>
+          ) : null}
+
           <button
             type="button"
-            onClick={() => startFeishuLogin(next)}
-            disabled={demoMode}
+            onClick={onLogin}
+            disabled={busy}
             className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-[#3370ff] text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="grid size-5 place-items-center rounded bg-white/15 text-[11px] font-bold">飞</span>
-            使用飞书账号登录
+            {busy ? "正在进入…" : demoMode ? "进入演示工作台" : "使用飞书账号登录"}
           </button>
 
+          {demoMode ? (
+            <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+              演示会话由网关签发，退出登录即失效；不会读取或写入飞书账号。
+            </p>
+          ) : null}
+
           <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-            点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；
-            授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground/80">
-              ADMIN_OPEN_IDS
-            </code>
-            白名单。
+            {demoMode
+              ? "演示模式不跳转飞书，只签发一个仅本机有效的演示会话；改回真实登录后，这里才会跳转飞书授权页。"
+              : "点击后跳转飞书授权页，由飞书返回真实头像、姓名与 open_id；授权完成后回到工作台。首次登录前，需要把 open_id 加入网关的"}
+            {!demoMode ? (
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground/80">
+                ADMIN_OPEN_IDS
+              </code>
+            ) : null}
+            {!demoMode ? "白名单。" : ""}
           </p>
 
           <div className="mt-6 rounded-xl border border-border bg-muted/40 p-4">
