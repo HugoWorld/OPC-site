@@ -137,6 +137,13 @@ const GROUP_ANCHORS: Record<string, Record<string, string>> = {
 
 /* ---------------- 右侧预览 iframe ---------------- */
 
+/** 访客站地址：工作台在 8081，访客站在同主机 8080。 */
+function visitorSiteUrl(): string {
+  const url = new URL(window.location.origin)
+  if (url.port === "8081") url.port = "8080"
+  return `${url.origin}/`
+}
+
 export interface PreviewTarget {
   path: string
   anchor?: string
@@ -523,7 +530,7 @@ function Overview() {
               </span>
             ) : null}
             <Button asChild variant="outline" className="gap-1.5">
-              <a href="#/" target="_blank" rel="noreferrer">
+              <a href={visitorSiteUrl()} target="_blank" rel="noreferrer">
                 <ExternalLink className="size-3.5" />
                 打开站点前台
               </a>
@@ -942,8 +949,11 @@ function Publish() {
     const a = document.createElement("a")
     a.href = url
     a.download = filename
+    document.body.appendChild(a)
     a.click()
-    URL.revokeObjectURL(url)
+    a.remove()
+    // 立即 revoke 会让部分浏览器取消尚未落盘的 blob 下载（TS 导出曾因此无文件）
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500)
   }
 
   const exportYaml = () => {
@@ -954,7 +964,7 @@ function Publish() {
 
   const exportTs = () => {
     const ts = `/* HugoW个人门户 · 站点数据导出（${new Date().toISOString().slice(0, 10)}）\n * 生成自运营工作台。将此文件中的覆盖数据合入 data/*.ts 默认值即可固化。 */\n\nexport const SITE_DATA_EXPORT = ${JSON.stringify(data, null, 2)} as const\n`
-    download("hugow-site-data.ts", ts, "text/typescript;charset=utf-8")
+    download("hugow-site-data.ts", ts, "application/octet-stream")
     setNotice("已导出 TS（覆盖数据常量，可合入 data 文件）")
   }
 
@@ -1289,7 +1299,7 @@ export function AdminPage() {
             )}
             <OnboardingChip />
             <Button asChild variant="ghost" size="sm" className="gap-1.5">
-              <a href="#/" rel="noreferrer">
+              <a href={visitorSiteUrl()} target="_blank" rel="noreferrer">
                 <ExternalLink className="size-3.5" />
                 查看站点
               </a>
