@@ -244,6 +244,8 @@ export interface SiteStore {
   publishing: boolean
   /** 最近一次发布的失败原因（成功时清空） */
   publishError: string | null
+  /** 最近一次发布成功但 Base 同步不完整时的告警（例如 21001 权限问题） */
+  publishWarning: string | null
   /** 重置已发布层 */
   resetPublished: () => void
   /** 是否有未发布的草稿改动 */
@@ -273,6 +275,7 @@ export function SiteStoreProvider({
   const [lastPublishedAt, setLastPublishedAt] = useState<number | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [publishWarning, setPublishWarning] = useState<string | null>(null)
 
   const active = scope === "draft" ? draft : published
   const data = useMemo(() => mergeData(active), [active])
@@ -341,6 +344,7 @@ export function SiteStoreProvider({
     const postPublish = async (nextDraft: Partial<EditableData>, success: () => void) => {
       setPublishing(true)
       setPublishError(null)
+      setPublishWarning(null)
       try {
         const res = await fetch(apiUrl("/api/publish"), {
           method: "POST",
@@ -364,6 +368,12 @@ export function SiteStoreProvider({
         if (res.ok) {
           success()
           setLastPublishedAt(Date.now())
+          if (result && "base" in result && result.base === "partial") {
+            const items = result.warnings ?? []
+            setPublishWarning(
+              `站点已发布，但 Base 未完全同步${items.length ? `：${items.slice(0, 3).join("；")}` : ""}`,
+            )
+          }
           return
         }
         if (res.status === 207 && result && "failedTables" in result) {
@@ -423,12 +433,24 @@ export function SiteStoreProvider({
       },
       publishing,
       publishError,
+      publishWarning,
       hasDraftChanges,
       sliceHasDraftChange,
       lastDraftSavedAt,
       lastPublishedAt,
     }
-  }, [data, draft, published, scope, publishing, publishError, hasDraftChanges, lastDraftSavedAt, lastPublishedAt])
+  }, [
+    data,
+    draft,
+    published,
+    scope,
+    publishing,
+    publishError,
+    publishWarning,
+    hasDraftChanges,
+    lastDraftSavedAt,
+    lastPublishedAt,
+  ])
 
   return <SiteStoreContext.Provider value={store}>{children}</SiteStoreContext.Provider>
 }

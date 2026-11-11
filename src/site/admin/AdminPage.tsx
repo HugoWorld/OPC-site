@@ -439,7 +439,7 @@ function SliceEditor<K extends SliceKey>({
 /* ---------------- 总览 ---------------- */
 
 function Overview() {
-  const { data, draft, hasDraftChanges, publishAll, publishing, publishError, lastPublishedAt, lastDraftSavedAt } = useSiteStore()
+  const { data, draft, hasDraftChanges, publishAll, publishing, publishError, publishWarning, lastPublishedAt, lastDraftSavedAt } = useSiteStore()
 
   const STAT_ICONS: Record<string, LucideIcon> = {
     solutions: Layers,
@@ -514,6 +514,11 @@ function Overview() {
             )}
             {publishError ? (
               <span className="text-[11.5px] text-amber-700">发布失败：{publishError}</span>
+            ) : null}
+            {publishWarning ? (
+              <span className="max-w-[520px] text-[11.5px] leading-relaxed text-amber-700">
+                {publishWarning}
+              </span>
             ) : null}
             <Button asChild variant="outline" className="gap-1.5">
               <a href="#/" target="_blank" rel="noreferrer">
