@@ -342,6 +342,95 @@ t("签名会话可直接通过网关鉴权", async () => {
   assert.equal(JSON.parse(res.body).name, "HugoW")
 })
 
+/* ---------------- 扫码票据登录 ---------------- */
+
+t("扫码票据：创建 → 手机授权 → 电脑领取会话", async () => {
+  const deps = makeDeps({
+    oauth: {
+      redirectUri: "http://127.0.0.1:8081/api/auth/callback",
+      authorizeUrl: (state, redirectUri) =>
+        `https://auth.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    },
+  })
+  const gw = createGateway(deps)
+
+  const created = await gw(req("POST", "/api/auth/qr-ticket", JSON.stringify({ next: "/admin/" })))
+  assert.equal(created.status, 200)
+  const ticket = JSON.parse(created.body) as { id: string; token: string; url: string }
+  assert.ok(ticket.id && ticket.token)
+  assert.ok(ticket.url.includes(`/api/auth/qr-entry?id=${ticket.id}`))
+
+  const entry = await gw(req("GET", `/api/auth/qr-entry?id=${ticket.id}`))
+  assert.equal(entry.status, 302)
+  const state = new URL(entry.headers.location).searchParams.get("state")
+  assert.ok(state)
+  const stateCookie = /oauth_state=([^;]+)/.exec(entry.headers["set-cookie"] ?? "")?.[1]
+  assert.ok(stateCookie)
+
+  const scanned = await gw(req("GET", `/api/auth/qr-ticket?id=${ticket.id}`))
+  assert.equal(JSON.parse(scanned.body).status, "scanned")
+
+  const callback = await gw(
+    req(
+      "GET",
+      `/api/auth/callback?code=c1&state=${encodeURIComponent(state!)}`,
+      "",
+      { cookie: `oauth_state=${stateCookie}` },
+    ),
+  )
+  assert.equal(callback.status, 200)
+  assert.ok(callback.body.includes("登录成功"))
+  const phoneCookie = /sid=([^;]+)/.exec(callback.headers["set-cookie"] ?? "")
+  assert.ok(phoneCookie)
+
+  const authorized = await gw(req("GET", `/api/auth/qr-ticket?id=${ticket.id}`))
+  assert.equal(JSON.parse(authorized.body).status, "authorized")
+
+  const claim = await gw(
+    req("POST", "/api/auth/qr-ticket/claim", JSON.stringify({ id: ticket.id, token: ticket.token })),
+  )
+  assert.equal(claim.status, 200)
+  const claimed = /sid=([^;]+)/.exec(claim.headers["set-cookie"] ?? "")
+  assert.ok(claimed)
+  const me = await gw(req("GET", "/api/auth/me", "", { cookie: "sid=" + claimed![1] }))
+  assert.equal(me.status, 200)
+  assert.equal(JSON.parse(me.body).name, "HugoW")
+})
+
+t("扫码票据：错误 claimToken 返回 403", async () => {
+  const deps = makeDeps({
+    oauth: {
+      redirectUri: "http://127.0.0.1:8081/api/auth/callback",
+      authorizeUrl: (state, redirectUri) =>
+        `https://auth.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    },
+  })
+  const gw = createGateway(deps)
+  const created = await gw(req("POST", "/api/auth/qr-ticket", "{}"))
+  const ticket = JSON.parse(created.body) as { id: string }
+  const claim = await gw(
+    req("POST", "/api/auth/qr-ticket/claim", JSON.stringify({ id: ticket.id, token: "wrong" })),
+  )
+  assert.equal(claim.status, 403)
+})
+
+t("扫码票据：未授权时领取返回 202", async () => {
+  const deps = makeDeps({
+    oauth: {
+      redirectUri: "http://127.0.0.1:8081/api/auth/callback",
+      authorizeUrl: (state, redirectUri) =>
+        `https://auth.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    },
+  })
+  const gw = createGateway(deps)
+  const created = await gw(req("POST", "/api/auth/qr-ticket", "{}"))
+  const ticket = JSON.parse(created.body) as { id: string; token: string }
+  const claim = await gw(
+    req("POST", "/api/auth/qr-ticket/claim", JSON.stringify(ticket)),
+  )
+  assert.equal(claim.status, 202)
+})
+
 /* ---------------- 管理员账号密码登录 ---------------- */
 
 t("账号密码登录未配置时返回 404", async () => {

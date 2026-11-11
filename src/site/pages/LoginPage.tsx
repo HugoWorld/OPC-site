@@ -3,37 +3,20 @@
 /* 页面不展示任何环境变量、内部字段、身份标识或数据源细节。               */
 /* ------------------------------------------------------------------ */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import QRCode from "qrcode"
 
 import {
   apiUrl,
-  fetchFeishuQrUrl,
+  claimQrTicket,
+  createQrTicket,
+  fetchQrTicketStatus,
   startDemoLogin,
   startFeishuLogin,
   startPasswordLogin,
+  type QrTicket,
 } from "@/site/admin/auth"
-
-const QR_SDK_SRC =
-  "https://lf-package-cn.feishucdn.com/obj/feishu-static/lark/passport/qrcode/LarkSSOSDKWebQRCode-1.0.3.js"
-
-type QrLoginInstance = {
-  matchOrigin: (origin: string) => boolean
-  matchData: (data: unknown) => boolean
-}
-type QrLoginFactory = (options: {
-  id: string
-  goto: string
-  width?: string
-  height?: string
-  style?: string
-}) => QrLoginInstance
-
-declare global {
-  interface Window {
-    QRLogin?: QrLoginFactory
-  }
-}
 
 function readLoginQuery(): { next: string; error: string } {
   const raw = window.location.hash.replace(/^#/, "")
@@ -57,51 +40,21 @@ const ERROR_TEXT: Record<string, string> = {
   demo_mode: "当前是演示模式，只开放演示工作台。",
 }
 
-function loadQrSdk(): Promise<boolean> {
-  if (window.QRLogin) return Promise.resolve(true)
-  return new Promise((resolve) => {
-    const existing = document.querySelector<HTMLScriptElement>("script[data-feishu-qr]")
-    if (existing) {
-      if (existing.dataset.loaded === "1") {
-        resolve(Boolean(window.QRLogin))
-        return
-      }
-      existing.addEventListener("load", () => resolve(Boolean(window.QRLogin)), { once: true })
-      existing.addEventListener("error", () => resolve(false), { once: true })
-      return
-    }
-    const script = document.createElement("script")
-    script.src = QR_SDK_SRC
-    script.async = true
-    script.dataset.feishuQr = "1"
-    script.addEventListener(
-      "load",
-      () => {
-        script.dataset.loaded = "1"
-        resolve(Boolean(window.QRLogin))
-      },
-      { once: true },
-    )
-    script.addEventListener("error", () => resolve(false), { once: true })
-    document.head.appendChild(script)
-    window.setTimeout(() => resolve(Boolean(window.QRLogin)), 8000)
-  })
-}
-
 export function LoginPage() {
   const { next, error } = readLoginQuery()
   const [demoMode, setDemoMode] = useState(false)
   const [passwordEnabled, setPasswordEnabled] = useState(false)
   const [oauthEnabled, setOauthEnabled] = useState(true)
   const [mode, setMode] = useState<"qr" | "password">("qr")
-  const [qrReady, setQrReady] = useState(false)
   const [qrFailed, setQrFailed] = useState(false)
+  const [qrHint, setQrHint] = useState("")
+  const [qrTicket, setQrTicket] = useState<QrTicket | null>(null)
+  const [qrImage, setQrImage] = useState("")
   const [qrKey, setQrKey] = useState(0)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState("")
-  const qrContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -132,53 +85,103 @@ export function LoginPage() {
   }, [])
 
   useEffect(() => {
+    if (!qrTicket) {
+      setQrImage("")
+      return
+    }
+    let cancelled = false
+    QRCode.toDataURL(qrTicket.url, {
+      margin: 1,
+      width: 260,
+      color: { dark: "#111827", light: "#ffffff" },
+    })
+      .then((dataUrl) => {
+        if (!cancelled) setQrImage(dataUrl)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQrFailed(true)
+          setQrHint("二维码生成失败，请刷新")
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [qrTicket])
+
+  useEffect(() => {
     if (demoMode || !oauthEnabled || mode !== "qr") return
     let cancelled = false
-    let qr: QrLoginInstance | null = null
-    let timer = 0
-    setQrReady(false)
+    let pollTimer = 0
+    let claiming = false
     setQrFailed(false)
+    setQrHint("")
+    setQrTicket(null)
 
     const run = async () => {
       try {
-        const goto = await fetchFeishuQrUrl(next)
+        const ticket = await createQrTicket(next)
         if (cancelled) return
-        const sdkOk = await loadQrSdk()
-        if (cancelled) return
-        if (!sdkOk || !window.QRLogin || !qrContainerRef.current) {
-          setQrFailed(true)
-          return
-        }
-        qr = window.QRLogin({
-          id: "feishu-qr-container",
-          goto,
-          width: "260",
-          height: "260",
-          style: "width:260px;height:260px;",
-        })
-        setQrReady(true)
+        setQrTicket(ticket)
 
-        const onMessage = (event: MessageEvent) => {
-          if (!qr || !qr.matchOrigin(event.origin) || !qr.matchData(event.data)) return
-          const tmpCode = (event.data as { tmp_code?: string }).tmp_code
-          if (!tmpCode) return
-          const target = new URL(goto)
-          target.searchParams.set("tmp_code", tmpCode)
-          window.location.assign(target.toString())
+        const poll = async () => {
+          if (cancelled) return
+          try {
+            const state = await fetchQrTicketStatus(ticket.id)
+            if (cancelled) return
+            if (state.status === "scanned") {
+              setQrHint("已扫描，请在手机上确认")
+            } else if (state.status === "authorized") {
+              if (claiming) return
+              claiming = true
+              setQrHint("登录成功，正在进入工作台")
+              try {
+                const claimed = await claimQrTicket(ticket.id, ticket.token)
+                window.location.assign(`#${claimed.next}`)
+                return
+              } catch (e) {
+                claiming = false
+                if (e instanceof Error && e.message === "PENDING") {
+                  // 手机端状态刚写入，下一轮再领取。
+                } else if (e instanceof Error && e.message === "NOT_ALLOWED") {
+                  setActionError("该飞书账号没有工作台权限，请使用站点管理员账号。")
+                  setQrFailed(true)
+                  return
+                } else {
+                  setActionError(e instanceof Error ? e.message : "登录失败，请刷新二维码")
+                  setQrFailed(true)
+                  return
+                }
+              }
+            } else if (state.status === "denied") {
+              setActionError(
+                ERROR_TEXT[state.error ?? "not_allowed"] ?? "该飞书账号没有工作台权限。",
+              )
+              setQrFailed(true)
+              return
+            } else if (state.status === "expired") {
+              setQrHint("二维码已失效，请刷新")
+              setQrFailed(true)
+              return
+            }
+          } catch {
+            /* 网络抖动时下一轮继续 */
+          }
+          pollTimer = window.setTimeout(poll, 2000)
         }
-        window.addEventListener("message", onMessage)
-        timer = window.setTimeout(() => {
-          window.removeEventListener("message", onMessage)
-        }, 5 * 60 * 1000)
+        pollTimer = window.setTimeout(poll, 1500)
       } catch {
-        if (!cancelled) setQrFailed(true)
+        if (!cancelled) {
+          setQrFailed(true)
+          setQrHint("二维码加载失败，请刷新")
+        }
       }
     }
     void run()
 
     return () => {
       cancelled = true
-      if (timer) window.clearTimeout(timer)
+      if (pollTimer) window.clearTimeout(pollTimer)
     }
   }, [demoMode, oauthEnabled, mode, next, qrKey])
 
@@ -304,16 +307,26 @@ export function LoginPage() {
             <div className="mt-5">
               {oauthEnabled ? (
                 <>
-                  <div className="relative mx-auto flex h-[268px] w-[268px] items-center justify-center rounded-2xl border border-border bg-background">
-                    <div id="feishu-qr-container" ref={qrContainerRef} className="grid place-items-center" />
-                    {!qrReady && !qrFailed ? (
+                  <div className="relative mx-auto flex h-[268px] w-[268px] items-center justify-center overflow-hidden rounded-2xl border border-border bg-background">
+                    {qrImage && !qrFailed ? (
+                      <img
+                        src={qrImage}
+                        alt="飞书登录二维码"
+                        width={260}
+                        height={260}
+                        className="h-[260px] w-[260px]"
+                      />
+                    ) : null}
+                    {!qrImage && !qrFailed ? (
                       <div className="absolute inset-0 grid place-items-center rounded-2xl bg-background/85 text-[12px] text-muted-foreground">
                         正在生成二维码…
                       </div>
                     ) : null}
                     {qrFailed ? (
                       <div className="absolute inset-0 grid place-items-center gap-2 rounded-2xl bg-background px-6 text-center">
-                        <div className="text-[12.5px] text-muted-foreground">二维码加载失败</div>
+                        <div className="text-[12.5px] text-muted-foreground">
+                          {qrHint || "二维码加载失败"}
+                        </div>
                         <button
                           type="button"
                           onClick={() => setQrKey((k) => k + 1)}
@@ -325,7 +338,7 @@ export function LoginPage() {
                     ) : null}
                   </div>
                   <p className="mt-3 text-center text-[12px] leading-relaxed text-muted-foreground">
-                    打开飞书 App 扫一扫，确认后自动进入工作台
+                    {qrHint || "打开飞书 App 扫一扫，确认后自动进入工作台"}
                   </p>
                   <div className="mt-4 flex items-center gap-3">
                     <button

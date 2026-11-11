@@ -150,15 +150,67 @@ export function startFeishuLogin(next = "/admin/") {
   window.location.assign(target)
 }
 
-/** 取二维码 SDK 需要的授权地址（含 state），同时服务端会种下 oauth_state Cookie。 */
-export async function fetchFeishuQrUrl(next = "/admin/"): Promise<string> {
-  const res = await fetch(apiUrl(`/api/auth/qr?next=${encodeURIComponent(next)}`), {
+/** 创建扫码登录票据：二维码内容由服务端生成，电脑端轮询票据状态。 */
+export type QrTicket = { id: string; token: string; url: string; expiresAt: number }
+
+export async function createQrTicket(next = "/admin/"): Promise<QrTicket> {
+  const res = await fetch(apiUrl("/api/auth/qr-ticket"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ next }),
+  })
+  const body = (await res.json().catch(() => null)) as
+    | { id?: string; token?: string; url?: string; expiresAt?: number }
+    | null
+  if (!res.ok || !body?.id || !body.token || !body.url) {
+    throw new Error("二维码生成失败，请重试")
+  }
+  return { id: body.id, token: body.token, url: body.url, expiresAt: body.expiresAt ?? 0 }
+}
+
+export async function fetchQrTicketStatus(id: string): Promise<{
+  status: "pending" | "scanned" | "authorized" | "denied" | "expired"
+  error?: string
+}> {
+  const res = await fetch(apiUrl(`/api/auth/qr-ticket?id=${encodeURIComponent(id)}`), {
     credentials: "include",
     headers: { accept: "application/json" },
   })
-  const body = (await res.json().catch(() => null)) as { url?: string } | null
-  if (!res.ok || !body?.url) throw new Error("二维码生成失败，请重试")
-  return body.url
+  const body = (await res.json().catch(() => null)) as
+    | { status?: string; error?: string }
+    | null
+  const status = body?.status
+  if (
+    status === "pending" ||
+    status === "scanned" ||
+    status === "authorized" ||
+    status === "denied" ||
+    status === "expired"
+  ) {
+    return { status, error: body?.error }
+  }
+  throw new Error("登录状态查询失败")
+}
+
+/** 电脑端领取手机授权后的会话；成功即写入 HttpOnly 会话 Cookie。 */
+export async function claimQrTicket(id: string, token: string): Promise<{ next: string }> {
+  const res = await fetch(apiUrl("/api/auth/qr-ticket/claim"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ id, token }),
+  })
+  if (res.status === 202) throw new Error("PENDING")
+  const body = (await res.json().catch(() => null)) as
+    | { next?: string; error?: { code?: string; message?: string } }
+    | null
+  if (!res.ok) {
+    const code = body?.error?.code
+    if (code === "NOT_ALLOWED") throw new Error("NOT_ALLOWED")
+    throw new Error(body?.error?.message ?? "登录失败，请刷新二维码重试")
+  }
+  return { next: body?.next ?? "/admin/" }
 }
 
 /** 管理员账号密码登录（备用入口）。 */

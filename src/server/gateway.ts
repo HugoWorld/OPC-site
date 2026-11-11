@@ -6,7 +6,7 @@
 
 import type { PublishResult } from "../site/admin/data/adapter.ts"
 import type { SnapshotEnvelope } from "../site/admin/data/snapshot.ts"
-import { createHash, timingSafeEqual } from "node:crypto"
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import {
   createMemoryRateLimiter,
   type RateLimiter,
@@ -97,6 +97,16 @@ export interface RateLimitRules {
   publish: RateLimitRule
 }
 
+interface QrTicket {
+  id: string
+  claimToken: string
+  next: string
+  status: "pending" | "scanned" | "authorized" | "denied"
+  sid?: string
+  error?: string
+  createdAt: number
+}
+
 /** 默认规则：登录 10 次/分/IP；发布 3 次/分/管理员。 */
 export const DEFAULT_RATE_RULES: RateLimitRules = {
   exchange: { limit: 10, windowMs: 60_000 },
@@ -143,6 +153,22 @@ function error(
   extra?: Record<string, string>,
 ): GatewayResponse {
   return json(status, { error: { code, message } }, extra)
+}
+
+function html(
+  status: number,
+  body: string,
+  extra?: Record<string, string>,
+): GatewayResponse {
+  return {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "x-content-type-options": "nosniff",
+      ...(extra ?? {}),
+    },
+    body,
+  }
 }
 
 /**
@@ -199,20 +225,29 @@ function safeNext(raw: string | null | undefined): string {
   return next.replace(/[\r\n]/g, "")
 }
 
-function encodeState(next: string): string {
-  const raw = JSON.stringify({ n: next, v: crypto.randomUUID() })
-  return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+function encodeStatePayload(payload: { n: string; v: string; q?: string }): string {
+  return btoa(JSON.stringify(payload))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")
 }
 
-function decodeState(state: string): string {
+function decodeStatePayload(state: string): { next: string; ticket?: string } {
   try {
     const padded = state.replace(/-/g, "+").replace(/_/g, "/")
     const bin = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4))
-    const parsed = JSON.parse(bin) as { n?: unknown }
-    return typeof parsed.n === "string" ? safeNext(parsed.n) : "/admin/"
+    const parsed = JSON.parse(bin) as { n?: unknown; q?: unknown }
+    return {
+      next: typeof parsed.n === "string" ? safeNext(parsed.n) : "/admin/",
+      ticket: typeof parsed.q === "string" && parsed.q ? parsed.q : undefined,
+    }
   } catch {
-    return "/admin/"
+    return { next: "/admin/" }
   }
+}
+
+function encodeState(next: string, ticket?: string): string {
+  return encodeStatePayload({ n: safeNext(next), v: crypto.randomUUID(), ...(ticket ? { q: ticket } : {}) })
 }
 
 function pathOf(url: string): string {
@@ -318,6 +353,22 @@ export function createGateway(deps: GatewayDeps) {
   const publishLock = createKeyedMutex()
   const startedAt = Date.now()
   const stats = { total: 0, byStatus: {} as Record<string, number> }
+  const qrTickets = new Map<string, QrTicket>()
+  const QR_TICKET_TTL_MS = 5 * 60 * 1000
+
+  function readTicket(id: string): QrTicket | null {
+    const ticket = qrTickets.get(id)
+    if (!ticket) return null
+    if (Date.now() - ticket.createdAt > QR_TICKET_TTL_MS) {
+      qrTickets.delete(id)
+      return null
+    }
+    return ticket
+  }
+
+  function ticketOrigin(): string {
+    return deps.oauth ? new URL(deps.oauth.redirectUri).origin : ""
+  }
 
   async function handle(req: GatewayRequest): Promise<GatewayResponse> {
     const path = pathOf(req.url)
@@ -371,7 +422,11 @@ export function createGateway(deps: GatewayDeps) {
       const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
       const oauthState = parseCookies(req.headers)[OAUTH_STATE_COOKIE]
       const stateParam = qs?.get("state")
-      const next = deps.oauth ? decodeState(stateParam ?? "") : "/admin/"
+      const stateInfo = deps.oauth
+        ? decodeStatePayload(stateParam ?? "")
+        : { next: "/admin/", ticket: undefined }
+      const ticket = stateInfo.ticket ? readTicket(stateInfo.ticket) : null
+      const next = stateInfo.next
       const back = (err?: string, extra?: Record<string, string>) =>
         redirect(
           adminPage(
@@ -380,30 +435,53 @@ export function createGateway(deps: GatewayDeps) {
           ),
           extra,
         )
+      const fail = (code: string): GatewayResponse => {
+        if (ticket) {
+          ticket.status = "denied"
+          ticket.error = code
+          return html(
+            200,
+            `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登录未完成</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1f2937"><main style="max-width:320px;padding:32px 24px;text-align:center"><div style="width:48px;height:48px;border-radius:14px;background:#fff1e6;color:#ea580c;display:grid;place-items:center;margin:0 auto 16px;font-size:24px">!</div><h1 style="font-size:20px;margin:0 0 8px">登录未完成</h1><p style="font-size:14px;line-height:1.7;color:#6b7280;margin:0">请回到电脑刷新二维码后重试。如提示无权限，请使用站点管理员账号。</p></main></body></html>`,
+          )
+        }
+        return back(code)
+      }
+      const ok = (sid: string): GatewayResponse => {
+        if (ticket) {
+          ticket.status = "authorized"
+          ticket.sid = sid
+          return html(
+            200,
+            `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登录成功</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1f2937"><main style="max-width:320px;padding:32px 24px;text-align:center"><div style="width:48px;height:48px;border-radius:14px;background:#ecfdf5;color:#059669;display:grid;place-items:center;margin:0 auto 16px;font-size:24px">✓</div><h1 style="font-size:20px;margin:0 0 8px">登录成功</h1><p style="font-size:14px;line-height:1.7;color:#6b7280;margin:0">请回到电脑，页面会自动进入工作台。</p></main></body></html>`,
+            { "set-cookie": sessionCookie(sid, deps.secureCookies ?? true) },
+          )
+        }
+        return back(undefined, {
+          "set-cookie": sessionCookie(sid, deps.secureCookies ?? true),
+        })
+      }
 
       // 授权页被拒绝时飞书会带 error=access_denied 回跳，不交换 code。
       const oauthError = qs?.get("error")
-      if (oauthError) return back(oauthError)
+      if (oauthError) return fail(oauthError)
 
       if (deps.oauth) {
         if (!oauthState || !stateParam || oauthState !== stateParam) {
-          return back("state_mismatch")
+          return fail("state_mismatch")
         }
       }
       const code = qs?.get("code")
-      if (!code) return back("missing_code")
+      if (!code) return fail("missing_code")
       const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
-      if (!gate.allowed) return back("rate_limited")
+      if (!gate.allowed) return fail("rate_limited")
       try {
         const { user } = await deps.feishu.exchangeCode(code)
         const est = await establishSession(deps, user)
-        if (!est.ok) return back("not_allowed")
-        return back(undefined, {
-          "set-cookie": sessionCookie(est.sid, deps.secureCookies ?? true),
-        })
+        if (!est.ok) return fail("not_allowed")
+        return ok(est.sid)
       } catch (e) {
         console.error("[gateway] feishu callback failed:", e instanceof Error ? e.message : e)
-        return back("upstream")
+        return fail("upstream")
       }
     }
 
@@ -518,29 +596,109 @@ export function createGateway(deps: GatewayDeps) {
       )
     }
 
-    /* GET /api/auth/qr：返回飞书二维码 SDK 所需的授权地址，并种下 oauth_state。
-     * 二维码在页面内渲染，扫码确认后由飞书回调 /api/auth/callback。 */
-    if (path === "/api/auth/qr" && method === "GET") {
+    /* POST /api/auth/qr-ticket：创建一个扫码登录票据。
+     * 二维码内容指向本网关的 /api/auth/qr-entry，手机打开后走标准 OAuth；
+     * 电脑端轮询票据状态并领取会话，不再依赖飞书二维码 SDK 的 postMessage。 */
+    if (path === "/api/auth/qr-ticket" && method === "POST") {
       if (deps.demoMode) return error(503, "DEMO_MODE", "当前是演示模式")
+      if (!deps.oauth) return error(501, "OAUTH_NOT_CONFIGURED", "未配置飞书 OAuth")
+      const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
+      if (!gate.allowed) return tooMany(gate.retryAfterMs)
+      const body = parseBody(req.bodyText)
+      const next = safeNext(typeof body?.next === "string" ? body.next : "/admin/")
+      const id = randomBytes(18).toString("base64url")
+      const claimToken = randomBytes(24).toString("base64url")
+      const now = Date.now()
+      // 顺手清理过期票据，避免长时间运行后 Map 只增不减。
+      for (const [key, item] of qrTickets) {
+        if (now - item.createdAt > QR_TICKET_TTL_MS) qrTickets.delete(key)
+      }
+      if (qrTickets.size >= 5000) {
+        const oldest = qrTickets.keys().next().value
+        if (oldest) qrTickets.delete(oldest)
+      }
+      qrTickets.set(id, {
+        id,
+        claimToken,
+        next,
+        status: "pending",
+        createdAt: now,
+      })
+      return json(200, {
+        id,
+        token: claimToken,
+        url: `${ticketOrigin()}/api/auth/qr-entry?id=${encodeURIComponent(id)}`,
+        expiresAt: now + QR_TICKET_TTL_MS,
+      })
+    }
+
+    /* GET /api/auth/qr-entry?id=：手机扫码后打开，跳转飞书授权页并带上票据。 */
+    if (path === "/api/auth/qr-entry" && method === "GET") {
       if (!deps.oauth) return error(501, "OAUTH_NOT_CONFIGURED", "未配置飞书 OAuth")
       const qIndex = req.url.indexOf("?")
       const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
-      const next = safeNext(qs?.get("next"))
-      const state = encodeState(next)
+      const id = qs?.get("id") ?? ""
+      const ticket = readTicket(id)
+      if (!ticket) {
+        return html(
+          410,
+          `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>二维码已失效</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1f2937"><main style="max-width:320px;padding:32px 24px;text-align:center"><h1 style="font-size:20px;margin:0 0 8px">二维码已失效</h1><p style="font-size:14px;line-height:1.7;color:#6b7280;margin:0">请回到电脑刷新二维码后重新扫描。</p></main></body></html>`,
+        )
+      }
+      ticket.status = "scanned"
+      const state = encodeState(ticket.next, ticket.id)
       try {
-        const url = (deps.oauth.qrAuthorizeUrl ?? deps.oauth.authorizeUrl)(
-          state,
-          deps.oauth.redirectUri,
-        )
-        return json(
-          200,
-          { url, redirectUri: deps.oauth.redirectUri },
-          { "set-cookie": oauthStateCookie(state, deps.secureCookies ?? true) },
-        )
+        return redirect(deps.oauth.authorizeUrl(state, deps.oauth.redirectUri), {
+          "set-cookie": oauthStateCookie(state, deps.secureCookies ?? true),
+        })
       } catch (e) {
-        console.error("[gateway] oauth qr failed:", e instanceof Error ? e.message : e)
+        console.error("[gateway] qr entry failed:", e instanceof Error ? e.message : e)
         return error(502, "OAUTH_CONFIG", "飞书授权地址生成失败")
       }
+    }
+
+    /* GET /api/auth/qr-ticket?id=：电脑端轮询扫码状态。 */
+    if (path === "/api/auth/qr-ticket" && method === "GET") {
+      const qIndex = req.url.indexOf("?")
+      const qs = qIndex >= 0 ? new URLSearchParams(req.url.slice(qIndex + 1)) : null
+      const id = qs?.get("id") ?? ""
+      const ticket = readTicket(id)
+      if (!ticket) return json(200, { status: "expired" })
+      return json(200, {
+        status: ticket.status,
+        error: ticket.error,
+      })
+    }
+
+    /* POST /api/auth/qr-ticket/claim：电脑端用票据领取会话（一次性）。 */
+    if (path === "/api/auth/qr-ticket/claim" && method === "POST") {
+      const gate = limiter.hit(`exchange:${clientIp(req.headers)}`, rules.exchange)
+      if (!gate.allowed) return tooMany(gate.retryAfterMs)
+      const body = parseBody(req.bodyText)
+      if (!body) return error(400, "BAD_REQUEST", "请求体不是合法 JSON")
+      const id = typeof body.id === "string" ? body.id : ""
+      const token = typeof body.token === "string" ? body.token : ""
+      const ticket = readTicket(id)
+      if (
+        !ticket ||
+        ticket.claimToken.length !== token.length ||
+        !timingSafeEqual(Buffer.from(ticket.claimToken), Buffer.from(token))
+      ) {
+        return error(403, "QR_INVALID", "二维码无效，请刷新后重试")
+      }
+      if (ticket.status === "denied") {
+        return error(403, "NOT_ALLOWED", "该飞书账号没有工作台权限", {
+          "x-login-error": ticket.error ?? "not_allowed",
+        })
+      }
+      if (ticket.status !== "authorized" || !ticket.sid) {
+        return json(202, { status: ticket.status })
+      }
+      const sid = ticket.sid
+      qrTickets.delete(id)
+      return json(200, { ok: true, next: ticket.next }, {
+        "set-cookie": sessionCookie(sid, deps.secureCookies ?? true),
+      })
     }
 
     /* GET /api/auth/start：浏览器跳到飞书授权页，state 用签名前的随机值 + 回跳路径。 */
