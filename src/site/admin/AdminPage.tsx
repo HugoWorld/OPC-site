@@ -150,24 +150,28 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
   const lastLocate = useRef("")
   const lastSrc = useRef("")
 
+  /* 预览必须加载「访客站」构建，而不是工作台构建。
+   * 生产环境由 8081 的 Nginx 把 /preview/ 指到访客站 dist，
+   * 因此地址与工作台同源：iframe 可复用同一份 localStorage 草稿。 */
+  const previewSrc = `${window.location.origin}/preview/#${target.path}?preview=1`
+
   // target 变化（切换 tab / 展开某组）→ 导航 iframe 并定位高亮
   const locate = useCallback(() => {
     const iframe = iframeRef.current
     if (!iframe?.contentWindow) return
     const anchor = target.groupAnchor ?? target.anchor
     const key = `${target.path}#${anchor ?? ""}`
-    const src = `${window.location.origin}${window.location.pathname}${window.location.search}#${target.path}?preview=1`
-    if (src !== lastSrc.current) {
+    if (previewSrc !== lastSrc.current) {
       // 路由不同：导航，onLoad 后再定位
-      lastSrc.current = src
+      lastSrc.current = previewSrc
       lastLocate.current = key
-      iframe.src = src
+      iframe.src = previewSrc
       return
     }
     lastLocate.current = key
     // 同路由：直接定位（iframe 已在该页）
     iframe.contentWindow.postMessage({ type: "locate", anchor, durationMs: 2200 }, "*")
-  }, [target])
+  }, [previewSrc, target])
 
   useEffect(() => {
     locate()
@@ -193,7 +197,7 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
     return () => window.removeEventListener("keydown", onKey)
   }, [fullscreen])
 
-  const flatHref = `${window.location.origin}${window.location.pathname}${window.location.search}#${target.path}`
+  const flatHref = `${window.location.origin}/preview/#${target.path}?preview=1`
 
   return (
     <>
@@ -242,7 +246,7 @@ function PreviewPane({ target }: { target: PreviewTarget }) {
       <div className="relative flex-1 overflow-hidden rounded-xl border border-border bg-background">
         <iframe
           ref={iframeRef}
-          src={`${window.location.origin}${window.location.pathname}${window.location.search}#${target.path}?preview=1`}
+          src={previewSrc}
           onLoad={onLoad}
           title="站点实时预览"
           className="h-full w-full border-0 bg-white"
