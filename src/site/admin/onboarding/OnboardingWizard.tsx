@@ -19,23 +19,29 @@ import type { StepStatus } from "@/site/admin/onboarding/steps"
 /** 已预置的应用：默认只读展示，换应用才展开输入 */
 function AppPreset() {
   const ob = useOnboarding()
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(() => !ob.config.appId.trim())
   const ok = /^cli_[a-z0-9]{12,}$/i.test(ob.config.appId.trim())
+  const empty = !ob.config.appId.trim()
+  const badge = empty ? "待填写" : ok ? "已预置" : "格式不对"
 
   return (
     <div className="space-y-2">
       <div className="rounded-xl border border-border bg-card p-3.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[12.5px] font-semibold">OPC-site</div>
-            <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{ob.config.appId}</div>
+            <div className="text-[12.5px] font-semibold">{empty ? "填写飞书企业自建应用" : "OPC-site"}</div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{ob.config.appId || "尚未填写 App ID"}</div>
           </div>
           <span
             className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] ${
-              ok ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700"
+              empty
+                ? "bg-muted text-muted-foreground"
+                : ok
+                  ? "bg-emerald-500/10 text-emerald-700"
+                  : "bg-amber-500/10 text-amber-700"
             }`}
           >
-            {ok ? "已预置" : "格式不对"}
+            {badge}
           </span>
         </div>
         <button
@@ -68,28 +74,32 @@ function AppPreset() {
 /** 已预置的多维表格：只读展示名称与入口，换表时粘贴完整链接自动识别 */
 function BasePreset() {
   const ob = useOnboarding()
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(() => !ob.config.baseToken.trim())
   const [raw, setRaw] = useState("")
   const ok = ob.config.baseToken.trim().length >= 16
+  const empty = !ob.config.baseToken.trim()
+  const baseUrl = empty ? "" : `https://my.feishu.cn/base/${ob.config.baseToken}`
 
   return (
     <div className="space-y-2">
       <div className="rounded-xl border border-border bg-card p-3.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[12.5px] font-semibold">{BASE_PRESET.name}</div>
+            <div className="text-[12.5px] font-semibold">{empty ? "填写多维表格 Base" : BASE_PRESET.name}</div>
             <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-              已预置　…{ob.config.baseToken.slice(-6)}
+              {empty ? "尚未填写 base_token" : `已填写　…${ob.config.baseToken.slice(-6)}`}
             </div>
           </div>
-          <a
-            href={BASE_PRESET.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex shrink-0 items-center gap-0.5 text-[11.5px] font-medium text-primary hover:underline"
-          >
-            打开表格 <ExternalLink className="size-3" />
-          </a>
+          {baseUrl ? (
+            <a
+              href={baseUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex shrink-0 items-center gap-0.5 text-[11.5px] font-medium text-primary hover:underline"
+            >
+              打开表格 <ExternalLink className="size-3" />
+            </a>
+          ) : null}
         </div>
         <button
           type="button"

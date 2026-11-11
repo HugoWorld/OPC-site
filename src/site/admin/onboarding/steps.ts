@@ -138,13 +138,13 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "app",
     title: "飞书应用与机器人",
-    desc: "本次要接入的应用已经预置好，通常不需要改。只有换应用时才需要填 App ID（在「凭证与基础信息」里，不是密钥）。",
+    desc: "填写飞书企业自建应用的 App ID（在「凭证与基础信息」里，不是密钥）。仓库不内置真实值；首次部署需自行填写，已填写过可在本机保留。",
     kind: "auto",
     tab: "overview",
     check: async (cfg) => {
       await sleep(450)
       if (/^cli_[a-z0-9]{12,}$/i.test(cfg.appId.trim())) {
-        return { status: "done", message: "应用标识格式正确，机器人能力已添加（OPC-site）" }
+        return { status: "done", message: "App ID 格式正确；请在飞书开放平台确认应用已发布、机器人能力与权限已添加" }
       }
       return { status: "pending", message: "App ID 格式不正确，应以 cli_ 开头" }
     },
@@ -152,13 +152,13 @@ export const ONBOARDING_STEPS: StepDef[] = [
   {
     id: "base",
     title: "数据后端与 12 张表",
-    desc: "多维表格已预置，这一步也不需要你动手：系统会逐张核对里面的 12 张表，默认灰态，通过即打勾，缺表可一键补齐。真要换表时，粘贴完整链接就行，不用去找 token。",
+    desc: "多维表格不会由安装脚本自动创建。请先在飞书准备含 12 张表的 Base，并把应用加入 Base 文档应用；本页的逐张核对与状态只是界面演示，不会真实读写 Base。换表时粘贴完整链接即可。",
     kind: "auto",
     tab: "overview",
     check: async (cfg) => {
       await sleep(500)
       if (cfg.baseToken.trim().length >= 20) {
-        return { status: "done", message: "已定位到多维表格，12 张表结构核对完成" }
+        return { status: "done", message: "base_token 已填写；真实表结构请在飞书 Base 核对，以发布结果为准" }
       }
       return { status: "pending", message: "base_token 长度不足，请核对多维表格链接" }
     },
