@@ -63,6 +63,13 @@ function loadPersisted(): Partial<PersistedState> {
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const persisted = useMemo(loadPersisted, [])
+  // 仓库不再内置任何真实 Base token / App ID 预置值；只有显式配置了预置值时才做“换 Base 失效”判断，
+  // 否则会把本机已保存的配置误判为过期，反复重置向导。
+  const hasStalePreset = Boolean(
+    DEFAULT_CONFIG.baseToken &&
+      persisted.config?.baseToken &&
+      persisted.config.baseToken !== DEFAULT_CONFIG.baseToken,
+  )
   // 登录会话：管理员身份与网关地址都从这里自动推导，不让用户手填
   const session = useMemo(loadSession, [])
   const endpoints = useMemo(deriveEndpoints, [])
@@ -74,10 +81,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<OnboardingConfig>(() => {
     // 网域与管理员身份始终以「当前环境 + 当前登录」为准，不允许沿用历史值
     // 后端切换（Base token 变化）时丢弃旧预置配置与旧步骤结论，避免继续显示上一个 Base/应用。
-    const stalePreset = Boolean(
-      persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken,
-    )
-    const base = { ...DEFAULT_CONFIG, ...(stalePreset ? {} : persisted.config ?? {}) }
+    const base = { ...DEFAULT_CONFIG, ...(hasStalePreset ? {} : persisted.config ?? {}) }
     return {
       ...base,
       gatewayUrl: endpoints.gatewayUrl,
@@ -86,30 +90,24 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   })
   const [marks, setMarks] = useState<ManualMarks>(
-    persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken
-      ? {}
-      : persisted.marks ?? {},
+    hasStalePreset ? {} : persisted.marks ?? {},
   )
   const [statuses, setStatuses] = useState<Record<string, StepStatus>>(
-    persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken
-      ? {}
-      : persisted.statuses ?? {},
+    hasStalePreset ? {} : persisted.statuses ?? {},
   )
   const [messages, setMessages] = useState<Record<string, string>>(
-    persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken
-      ? {}
-      : persisted.messages ?? {},
+    hasStalePreset ? {} : persisted.messages ?? {},
   )
   // 只有「连通性验证」真的通过才算初始化完成；旧版纯本地模式留下的 finished 不再冒充完成
   const [finished, setFinished] = useState<boolean>(() => {
-    if (persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken) {
+    if (hasStalePreset) {
       return false
     }
     return Boolean(persisted.finished) && persisted.statuses?.verify === "done"
   })
   // 步骤会随版本增减：历史持久值里的 currentStep 若已不存在，回落到第一步
   const [currentStep, setCurrentStep] = useState<string>(() => {
-    if (persisted.config?.baseToken && persisted.config.baseToken !== DEFAULT_CONFIG.baseToken) {
+    if (hasStalePreset) {
       return ONBOARDING_STEPS[0].id
     }
     return ONBOARDING_STEPS.some((s) => s.id === persisted.currentStep)

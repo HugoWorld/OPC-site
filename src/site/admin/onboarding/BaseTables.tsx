@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CheckCircle2, Circle, Loader2, RefreshCw, Wand2 } from "lucide-react"
+import { CheckCircle2, Circle, Loader2, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { TABLE_MANIFEST } from "@/site/admin/onboarding/steps"
@@ -16,8 +16,9 @@ function idleRows(): Record<string, RowState> {
 /**
  * 第 3 步的表结构核对面板。
  *
- * 交互设计：进入步骤即逐张自动核对，灰色 → 转圈 → 打勾，用户不需要填任何东西；
- * 核对发现缺表或结构不全时，出现「自动补齐」按钮一键处理。
+ * 交互设计：进入步骤即逐张核对，灰色 → 转圈 → 打勾，用户不需要填任何东西。
+ * 注意：当前为本地界面演示，不会真实读取或创建飞书 Base 表；实际建表必须在飞书完成，
+ * 以发布结果为准。界面不再提供会误导用户的“自动补齐”按钮。
  *
  * 说明：当前为本地模拟核对（无网关时的占位），接入网关后把 inspect 换成真实接口即可，
  * 界面与状态机不变。
@@ -35,17 +36,6 @@ export function BaseTablePanel({ token }: { token: string }) {
       // 12 张表均已存在于该多维表格（结构以网关返回为准，此处模拟通过）
       setRows((prev) => ({ ...prev, [t.key]: "ready" }))
       await wait(60)
-    }
-    setBusy(false)
-  }
-
-  const fillMissing = async () => {
-    setBusy(true)
-    for (const t of TABLE_MANIFEST) {
-      if (rows[t.key] === "ready") continue
-      setRows((prev) => ({ ...prev, [t.key]: "checking" }))
-      await wait(380)
-      setRows((prev) => ({ ...prev, [t.key]: "ready" }))
     }
     setBusy(false)
   }
@@ -110,19 +100,13 @@ export function BaseTablePanel({ token }: { token: string }) {
       <div className="flex items-center justify-between gap-2 border-t border-border px-3.5 py-2.5">
         <div className="text-[11.5px] text-muted-foreground">
           {busy
-            ? "正在逐张核对，稍等片刻"
+            ? "正在逐张核对（界面演示，不会真实读取 Base）"
             : missing > 0
-              ? `发现 ${missing} 张表未就绪，可一键补齐`
-              : `${TABLE_MANIFEST.length} 张表结构完整，无需补齐`}
+              ? `界面演示：${missing} 张表未就绪；实际建表请在飞书 Base 完成`
+              : `${TABLE_MANIFEST.length} 张表结构完整（界面演示，不替代真实发布校验）`}
         </div>
-        <Button
-          variant={!busy && missing > 0 ? "default" : "outline"}
-          size="sm"
-          className="gap-1"
-          disabled={busy || missing === 0}
-          onClick={() => void fillMissing()}
-        >
-          <Wand2 className="size-3.5" /> 自动补齐缺失表
+        <Button variant="outline" size="sm" disabled title="当前版本不会自动创建 Base 表">
+          需在 Base 手工建表
         </Button>
       </div>
     </div>
