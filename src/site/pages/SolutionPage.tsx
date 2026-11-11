@@ -1,13 +1,12 @@
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileCheck2, MinusCircle } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileCheck2, Sparkles } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { useSiteData } from "@/site/admin/store"
 import { Container } from "@/site/components/Layout"
-import { TIER_STYLE } from "@/site/data/solutions"
+import { SOLUTION_OUTCOME_FALLBACK } from "@/site/data/solutions"
 import { NotFoundPage } from "@/site/pages/NotFoundPage"
 
 /** 单个能力模块详情页。 */
@@ -17,6 +16,7 @@ export function SolutionPage() {
   const s = id ? solutions.find((x) => x.id === id) : undefined
 
   if (!s) return <NotFoundPage />
+  const outcomes = s.outcomes ?? SOLUTION_OUTCOME_FALLBACK[s.id] ?? []
 
   return (
     <div className="px-6 py-14 md:px-8 md:py-20">
@@ -32,9 +32,6 @@ export function SolutionPage() {
 
         {/* 头部 */}
         <div className="mt-8 flex flex-wrap items-center gap-2">
-          <Badge variant={TIER_STYLE[s.tier] as "default" | "secondary" | "outline"} className="font-normal">
-            {s.tier}
-          </Badge>
           <span className="text-[13px] text-muted-foreground">适用 · {s.audience}</span>
         </div>
         <h1 className="text-gradient mt-4 text-[clamp(1.9rem,4vw,2.9rem)] font-extrabold tracking-[-0.03em] text-balance">
@@ -89,8 +86,8 @@ export function SolutionPage() {
           </Card>
         </section>
 
-        {/* 交付物 + 边界 */}
-        <section className="mt-14 grid gap-4 md:grid-cols-2">
+        {/* 交付物 + 用起来之后 */}
+        <section className={`mt-14 grid gap-4 ${outcomes.length > 0 ? "md:grid-cols-2" : ""}`}>
           <Card className="glass-card gap-0 py-0">
             <div className="flex items-center gap-2 border-b border-border px-6 py-4">
               <FileCheck2 className="size-4 text-primary" />
@@ -106,32 +103,22 @@ export function SolutionPage() {
             </ul>
           </Card>
 
-          <Card className="glass-card gap-0 py-0">
-            <div className="flex items-center gap-2 border-b border-border px-6 py-4">
-              <MinusCircle className="size-4 text-muted-foreground" />
-              <h3 className="text-[15px] font-semibold">边界（不做什么）</h3>
-            </div>
-            <ul className="space-y-3 p-6">
-              {s.boundaries.map((b) => (
-                <li key={b} className="flex items-start gap-3">
-                  <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-muted-foreground" />
-                  <span className="text-[14px] leading-relaxed text-muted-foreground">{b}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </section>
-
-        {/* 技术栈 */}
-        <section className="mt-10">
-          <h3 className="text-[13px] font-semibold text-muted-foreground">技术栈</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {s.stack.map((t) => (
-              <Badge key={t} variant="outline" className="font-mono font-normal">
-                {t}
-              </Badge>
-            ))}
-          </div>
+          {outcomes.length > 0 && (
+            <Card className="glass-card gap-0 py-0">
+              <div className="flex items-center gap-2 border-b border-border px-6 py-4">
+                <Sparkles className="size-4 text-primary" />
+                <h3 className="text-[15px] font-semibold">用起来之后</h3>
+              </div>
+              <ul className="space-y-3 p-6">
+                {outcomes.map((o) => (
+                  <li key={o} className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span className="text-[14px] leading-relaxed">{o}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </section>
 
         {/* 正文 */}
@@ -177,12 +164,6 @@ export function SolutionPage() {
             ))}
           </section>
         )}
-
-        {/* 模块底部边界声明（模板自动插入） */}
-        <Separator className="mt-16" />
-        <p className="mt-6 max-w-[68ch] text-[13px] leading-relaxed text-muted-foreground text-pretty">
-          本模块交付工具与流水线，最终产出由你方人员复核确认。我不承诺流量、搜索排名、线索数量或模型输出准确率。
-        </p>
       </Container>
     </div>
   )

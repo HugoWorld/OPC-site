@@ -12,6 +12,8 @@ export interface Solution {
   problem: string
   capabilities: string[]
   deliverables: string[]
+  /** 使用后的正向变化（营销页展示，替代“不做什么”式边界说明） */
+  outcomes?: string[]
   boundaries: string[]
   stack: string[]
   demo: { status: "可演示" | "待建"; duration: string; note: string }
@@ -21,6 +23,25 @@ export interface Solution {
   body: { heading: string; paragraphs: string[]; table?: string[][] }[]
   /** 运营工作台可控制：false = 不展示（默认 true） */
   published?: boolean
+}
+
+/** 线上快照可能还没同步 outcomes 字段；按 id 回退，保证营销页始终有正向卖点。 */
+export const SOLUTION_OUTCOME_FALLBACK: Record<string, string[]> = {
+  "legal-contract-flow": [
+    "审查标准从个人经验变成团队清单",
+    "每份合同改了什么、为什么改，都能追溯",
+    "新人按清单上手，少反复问人",
+  ],
+  "legal-case-sop": [
+    "案件进度一屏可见，不用翻聊天记录",
+    "节点材料按清单归位，交接不丢",
+    "客户同步有固定节奏与口径",
+  ],
+  "legal-compliance-watch": [
+    "法规变化有固定巡检节奏",
+    "失效引用在检查前暴露",
+    "季度复盘有记录可查",
+  ],
 }
 
 export const SOLUTIONS: Solution[] = [
@@ -43,6 +64,7 @@ export const SOLUTIONS: Solution[] = [
       "合同审查台账与版本管理规范",
       "一次 2 小时的使用培训 + 30 天答疑",
     ],
+    outcomes: SOLUTION_OUTCOME_FALLBACK["legal-contract-flow"],
     boundaries: [
       "不构成法律意见，最终意见由执业律师出具",
       "不承诺审查结果或风险消除",
@@ -80,6 +102,7 @@ export const SOLUTIONS: Solution[] = [
       "案件台账与进度同步模板",
       "一次 2 小时的使用培训 + 30 天答疑",
     ],
+    outcomes: SOLUTION_OUTCOME_FALLBACK["legal-case-sop"],
     boundaries: [
       "不承诺案件结果或胜诉率",
       "流程与文书由执业人员审定后使用",
@@ -117,6 +140,7 @@ export const SOLUTIONS: Solution[] = [
       "合规自检清单与台账模板",
       "一次 2 小时的使用培训 + 30 天答疑",
     ],
+    outcomes: SOLUTION_OUTCOME_FALLBACK["legal-compliance-watch"],
     boundaries: [
       "巡检结果不构成合规结论，最终判断由专业人员出具",
       "不承诺处罚风险的消除",

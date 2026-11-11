@@ -37,12 +37,15 @@ export function ProductsSection() {
   if (list.length === 0) return null
   const move = (d: number) => setActive((i) => (i + d + list.length) % list.length)
   const n = list.length
-  // 左右循环展示栏：一行始终只呈现 3 张卡（多于 3 个时按 active 取前后邻位窗口）
+  // 左右循环展示栏：一行始终只呈现 3 张卡，多于 3 个时按 active 取前后邻位窗口。
+  // 正好 3 个时也必须重排，否则按钮改了 active 但画面不变，看起来像没反应。
   const visible =
-    n <= 3
-      ? list
-      : [active - 1, active, active + 1].map((i) => list[((i % n) + n) % n])
-  const midIdx = Math.min(1, n - 1)
+    n >= 3
+      ? [active - 1, active, active + 1].map((i) => list[((i % n) + n) % n])
+      : n === 2
+        ? [list[active % 2], list[(active + 1) % 2]]
+        : list
+  const midIdx = n >= 3 ? 1 : 0
 
   return (
     <div
