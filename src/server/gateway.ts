@@ -293,13 +293,14 @@ async function establishSession(
   { ok: true; session: SessionPayload; sid: string } | { ok: false; response: GatewayResponse }
 > {
   if (!deps.adminOpenIds.includes(user.openId)) {
+    console.warn(`[gateway] auth denied open_id=${user.openId} name=${user.name}`)
     return { ok: false, response: error(403, "NOT_ALLOWED", "该账号不在管理员白名单") }
   }
   const now = Date.now()
   const expiresAt = now + deps.sessionTtlMs
   const session: SessionPayload = {
     openId: user.openId,
-    name: user.name,
+    name: deps.displayName || user.name,
     avatarUrl: user.avatarUrl,
     createdAt: now,
     expiresAt,
