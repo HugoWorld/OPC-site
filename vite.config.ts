@@ -12,6 +12,8 @@ import tailwindcss from "@tailwindcss/vite"
 
 export default defineConfig(({ mode }) => {
   const admin = mode === "admin"
+  /** 豆包静态托管预览：单包构建，避免多 chunk + CDN 签名导致的模块加载失败 */
+  const doubao = mode === "doubao"
   return {
     // 相对路径构建：产物可直接双击 index.html 打开（file:// 也能加载资源）
     base: "./",
@@ -33,8 +35,11 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: admin ? "dist-admin" : "dist",
+      outDir: doubao ? "dist-doubao" : admin ? "dist-admin" : "dist",
       emptyOutDir: true,
+      // 豆包预览：所有 CSS/图片内联，只留一个入口 JS，避免多文件资源签名问题
+      cssCodeSplit: !doubao,
+      assetsInlineLimit: doubao ? 200_000 : 4096,
       // 首屏预算：主包（站点代码）控制在 400 kB 以内，框架与工作台各自成块
       chunkSizeWarningLimit: 600,
       rollupOptions: {
@@ -42,24 +47,26 @@ export default defineConfig(({ mode }) => {
         input: admin
           ? fileURLToPath(new URL("./admin.html", import.meta.url))
           : fileURLToPath(new URL("./index.html", import.meta.url)),
-        output: {
-          manualChunks(id: string) {
-            if (!id.includes("node_modules")) return
-            if (
-              id.includes("react-dom") ||
-              id.includes("react-router") ||
-              id.includes("/react/") ||
-              id.includes("\\react\\") ||
-              id.includes("scheduler")
-            ) {
-              return "vendor-react"
-            }
-            if (id.includes("@radix-ui") || id.includes("lucide-react")) {
-              return "vendor-ui"
-            }
-            return "vendor"
-          },
-        },
+        output: doubao
+          ? { inlineDynamicImports: true }
+          : {
+              manualChunks(id: string) {
+                if (!id.includes("node_modules")) return
+                if (
+                  id.includes("react-dom") ||
+                  id.includes("react-router") ||
+                  id.includes("/react/") ||
+                  id.includes("\\react\\") ||
+                  id.includes("scheduler")
+                ) {
+                  return "vendor-react"
+                }
+                if (id.includes("@radix-ui") || id.includes("lucide-react")) {
+                  return "vendor-ui"
+                }
+                return "vendor"
+              },
+            },
       },
     },
   }

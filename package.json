@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "build:site": "npm run build",
     "build:admin": "tsc -b && vite build --mode admin && node scripts/admin-index.mjs",
+    "build:doubao": "tsc -b && vite build --mode doubao",
     "build:all": "npm run build:site && npm run build:admin",
     "preview": "vite preview",
     "gateway": "node --experimental-strip-types src/server/main.ts",
