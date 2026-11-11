@@ -447,7 +447,7 @@ function SliceEditor<K extends SliceKey>({
 /* ---------------- 总览 ---------------- */
 
 function Overview() {
-  const { data, draft, hasDraftChanges, publishAll, publishing, publishError, publishWarning, lastPublishedAt, lastDraftSavedAt } = useSiteStore()
+  const { data, hasDraftChanges, publishAll, publishing, publishError, publishWarning } = useSiteStore()
 
   const STAT_ICONS: Record<string, LucideIcon> = {
     solutions: Layers,
@@ -491,18 +491,7 @@ function Overview() {
         <div aria-hidden className="ambient pointer-events-none absolute -right-16 -top-16 size-52 opacity-50" />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-[26px] font-extrabold tracking-[-0.02em]">运营工作台</h2>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${
-                  hasDraftChanges
-                    ? "border border-amber-500/30 bg-amber-500/10 text-amber-700"
-                    : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                }`}
-              >
-                {hasDraftChanges ? `${Object.keys(draft).length} 个切片有未发布改动` : "草稿与站点一致"}
-              </span>
-            </div>
+            <h2 className="text-[26px] font-extrabold tracking-[-0.02em]">运营工作台</h2>
             <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-muted-foreground">
               网站内容与外观的统一编辑入口：左侧选模块 → 中间编辑内容 → 右侧实时预览草稿；点「发布」后站点前台才会生效。所有修改自动保存到浏览器本地，不丢内容。
             </p>
@@ -581,28 +570,6 @@ function Overview() {
             </div>
           )
         })}
-      </div>
-
-      {/* 草稿 / 已发布状态 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            className={`size-2.5 shrink-0 rounded-full ${
-              hasDraftChanges ? "bg-amber-500" : "bg-emerald-500"
-            }`}
-          />
-          <div className="min-w-0">
-            <div className="text-[14.5px] font-semibold">
-              {hasDraftChanges ? "有草稿未发布" : "草稿与站点一致"}
-            </div>
-            <div className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-              所有修改自动保存{lastDraftSavedAt
-                ? ` · 草稿最后保存 ${new Date(lastDraftSavedAt).toLocaleTimeString()}`
-                : ""}
-              {lastPublishedAt ? ` · 上次发布 ${new Date(lastPublishedAt).toLocaleTimeString()}` : ""}
-            </div>
-          </div>
-        </div>
       </div>
 
     </div>
@@ -1102,7 +1069,7 @@ function Publish() {
 
 export function AdminPage() {
   const [tab, setTab] = useState<TabKey>("overview")
-  const { hasDraftChanges, publishAll, publishing, lastDraftSavedAt } = useSiteStore()
+  const { hasDraftChanges, publishAll, publishing, lastDraftSavedAt, lastPublishedAt } = useSiteStore()
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget>({ path: "/", anchor: "hero" })
   // FR-AUTH：不以 localStorage 缓存直接放行，必须先由 /api/auth/me 按 Cookie 验证。
   const [user, setUser] = useState<AdminUser | null>(null)
@@ -1312,7 +1279,7 @@ export function AdminPage() {
               <Save className="size-3.5" />
               {hasDraftChanges
                 ? `草稿已自动保存${lastDraftSavedAt ? " · " + new Date(lastDraftSavedAt).toLocaleTimeString() : ""}`
-                : "草稿与站点一致"}
+                : `草稿与站点一致${lastPublishedAt ? " · 上次发布 " + new Date(lastPublishedAt).toLocaleTimeString() : ""}`}
             </span>
             {hasDraftChanges && (
               <Button
