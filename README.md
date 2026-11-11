@@ -6,6 +6,13 @@
 不需要买 CDN、不需要对象存储、不需要数据库，也不需要登录服务器改内容。
 一台 2C2G Linux 云主机，一条命令，浏览器打开就能用。
 
+> **部署前必读（两个高频误解）**
+>
+> 1. **飞书账号必须是企业/团队租户账号。** 个人版账号、未加入企业租户的账号，无法正常创建企业自建应用，扫码登录会报“无权限”或 `21001`；扫码还要求管理员 `open_id` 在 `ADMIN_OPEN_IDS` 白名单且应用可见范围包含本人。
+> 2. **安装脚本不会自动创建多维表格，也不会自动创建 12 张表。** 需要先准备一个包含 12 表的 Base（推荐复制模板），并把飞书应用加入 Base 文档应用。工作台向导里的“逐张核对 / 自动补齐缺失表”只是界面演示，不会真正调用建表接口。
+>
+> 完整检查清单见 [`docs/product/部署与运营注意事项.md`](docs/product/部署与运营注意事项.md)，日常操作见 [`docs/product/用户使用手册.md`](docs/product/用户使用手册.md)。
+
 > 先看效果（豆包静态访客站，不含登录/发布）：<https://scnggxoitbu6.doubao.link/app/app_17htfakm32k>
 
 ![一键部署总览](docs/product/一键部署总览-v1.0.png)
@@ -147,6 +154,8 @@ npm run verify       # 类型、测试、同步、文案、资源、冒烟
 
 仓库结构、原生 Nginx + systemd 部署、证书与备份见 [`deploy/README.md`](deploy/README.md)。
 0 基础逐步操作见 [`docs/product/部署指南-v1.0.md`](docs/product/部署指南-v1.0.md)。
+部署前检查与运营注意事项见 [`docs/product/部署与运营注意事项.md`](docs/product/部署与运营注意事项.md)。
+日常操作见 [`docs/product/用户使用手册.md`](docs/product/用户使用手册.md)。
 产品化阶段评审与问题记录见 [`docs/product/阶段评审-v1.0.md`](docs/product/阶段评审-v1.0.md)。
 
 ## License
